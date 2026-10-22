@@ -26,7 +26,7 @@ class CRS97(CRSRobot):
     """
     Simulated CRS97. Accepts the same arguments as ``ctu_crs.CRS97`` plus the
     keyword-only simulator options of :class:`CRSRobot` (``visualize``,
-    ``open_browser``, ``speedup``, ``q0``, ``render_fps``).
+    ``open_browser``, ``speedup``, ``q0``, ``render_fps``, ``camera``).
     """
     def __init__(self, tty_dev: str | None = "/dev/mars", baudrate: int = 19200,
                  **sim_kwargs) -> None:

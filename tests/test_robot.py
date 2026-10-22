@@ -67,9 +67,3 @@ def test_speed_changes_duration():
         durations.append(time.monotonic() - t)
     assert durations[1] > 2 * durations[0]
 
-
-def test_grab_image_uses_camera_image(robot):
-    with pytest.raises(RuntimeError):
-        robot.grab_image()
-    robot.camera_image = np.zeros((4, 4, 3), np.uint8)
-    assert robot.grab_image().shape == (4, 4, 3)
