@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import ArrayLike
 
+from .camera import Camera, RobotBody
 from .gripper import Gripper
 from .kinematics import DHKinematics
 
@@ -43,6 +45,9 @@ class _Motion:
 # Peak velocity of the quintic profile relative to the average velocity
 _QUINTIC_PEAK = 1.875
 
+# How long the joint history is kept, longer than any camera lag [s]
+_HISTORY_DURATION = 10.0
+
 
 class CRSRobot(DHKinematics):
     """
@@ -55,6 +60,9 @@ class CRSRobot(DHKinematics):
     :param speedup: motion time scale, 1.0 = real speed, ``np.inf`` = instant
     :param q0: initial joint configuration, defaults to ``q_home``
     :param render_fps: rendering rate while moving
+    :param camera: overhead camera returned by ``grab_image``: True for the
+        default one (:class:`crs_sim.camera.Camera`), a ``Camera`` to
+        configure it, False for none
     :param crs_kwargs: robot parameters (see ``crs97.CRS97_PARAMS``)
     """
     def __init__(
@@ -68,6 +76,7 @@ class CRSRobot(DHKinematics):
         speedup: float = 1.0,
         q0: ArrayLike | None = None,
         render_fps: float = 30.0,
+        camera: bool | Camera = True,
         **crs_kwargs,
     ) -> None:
         super().__init__(link_lengths=[0.3052, 0.3048, 0.3302, 0.0762])
@@ -109,7 +118,8 @@ class CRSRobot(DHKinematics):
 
         self._initialized = False
         self._camera_name: str = crs_kwargs["camera_name"]
-        #: Image returned by grab_image(), set it to feed your vision pipeline
+        #: Image returned by grab_image() instead of the simulated camera,
+        #: set it to feed your vision pipeline a recorded image
         self.camera_image: np.ndarray | None = None
 
         # Simulation state
@@ -119,6 +129,8 @@ class CRSRobot(DHKinematics):
         self._acceleration = self._default_acceleration_irc_per_ms.astype(float)
         q0 = self.q_home if q0 is None else np.asarray(q0, dtype=float)
         self._motion = _Motion(q0.copy(), q0.copy(), time.monotonic(), 0.0)
+        # recent motions, so that q can be looked up in the past (camera lag)
+        self._motions: deque[_Motion] = deque([self._motion])
 
         self.viz = None
         if visualize:
@@ -129,17 +141,31 @@ class CRSRobot(DHKinematics):
             self._render_request = threading.Event()
             threading.Thread(target=self._render_loop, daemon=True).start()
 
+        #: Simulated overhead camera (crs_sim.camera.Camera) or None
+        self.camera: Camera | None = None
+        if camera is not False:
+            self.camera = Camera() if camera is True else camera
+            self.camera.add(RobotBody(self))
+            if self.viz is not None:
+                self.camera.show(self.viz)
+
     # ------------------------------------------------------------------
     # Interface of ctu_crs.CRSRobot
     # ------------------------------------------------------------------
     def grab_image(self, timeout: int = 10000) -> np.ndarray:
-        """Return ``self.camera_image``; the simulator has no camera."""
-        if self.camera_image is None:
+        """
+        Image of the simulated overhead camera (HxWx3 uint8, BGR), showing
+        the scene ``camera.lag`` seconds ago. Returns ``self.camera_image``
+        instead if it is set.
+        """
+        if self.camera_image is not None:
+            return self.camera_image.copy()
+        if self.camera is None:
             raise RuntimeError(
-                "The simulator has no camera. Set robot.camera_image to an "
-                "image (e.g. a recorded one) to be returned by grab_image()."
+                "The robot was created with camera=False. Set "
+                "robot.camera_image to an image to be returned by grab_image()."
             )
-        return self.camera_image.copy()
+        return self.camera.grab()
 
     def release(self) -> None:
         """Release errors and reset control unit (no-op)."""
@@ -250,6 +276,32 @@ class CRSRobot(DHKinematics):
         return np.all(q >= self.q_min) and np.all(q <= self.q_max)
 
     # ------------------------------------------------------------------
+    # Simulator only
+    # ------------------------------------------------------------------
+    def q_at(self, t: float) -> np.ndarray:
+        """
+        Joint configuration at time t (time.monotonic() clock), also in the
+        recent past (the last 10 s are kept), e.g. at a camera exposure time.
+        """
+        motions = list(self._motions)
+        for motion in reversed(motions):
+            if motion.t_start <= t:
+                return motion.q_at(t)
+        return motions[0].q_start.copy()
+
+    def add_object(self, obj, name: str | None = None) -> None:
+        """
+        Add an object (e.g. a crs_sim.rod.MovingRod) to the scene: the camera
+        renders it and the viewer shows it.
+        :param obj: object with ``surfaces_at(t)`` and optionally ``attach(viz, name)``
+        :param name: name in the viewer, defaults to the class name
+        """
+        if self.camera is not None:
+            self.camera.add(obj)
+        if self.viz is not None and hasattr(obj, "attach"):
+            obj.attach(self.viz, name or type(obj).__name__.lower())
+
+    # ------------------------------------------------------------------
     # Simulation internals
     # ------------------------------------------------------------------
     def _set_speed_no_check(self, speed_irc256_ms: ArrayLike) -> None:
@@ -266,6 +318,10 @@ class CRSRobot(DHKinematics):
                     * np.max(np.abs(q_goal - q_start) / self._max_velocity)
                     / self.speedup)
         self._motion = _Motion(q_start, q_goal, now, float(duration))
+        self._motions.append(self._motion)
+        while (len(self._motions) > 1
+               and self._motions[1].t_start < now - _HISTORY_DURATION):
+            self._motions.popleft()
         if self.viz is not None:
             self._render_request.set()
 
