@@ -40,6 +40,51 @@ Dependencies: `numpy`, `pin` (pinocchio) and `meshcat`; the optional `step` extr
 (`trimesh`, `cascadio`) loads CAD files. The real-robot packages (`ctu_crs`,
 `pypylon`, serial port drivers) are **not** needed.
 
+## Your solution: `src/` runs unchanged on the robot and in the simulator
+
+The solution lives in `src/` and is plain real-robot code: `from ctu_crs
+import CRS97`, numpy, cv2. It never imports `crs_sim` and does not know a
+scene exists; it sees the world only through the robot interface and
+`robot.grab_image()`.
+
+```bash
+python src/main.py --calib src/calibration/lab.npz                        # real CRS97, lab PC
+./sim.sh --puzzle C --seed 7 src/main.py --calib src/calibration/sim.npz  # simulator
+```
+
+`./sim.sh` (= `python -m crs_sim.launch`) builds the scene from its own
+options, provides a stand-in `ctu_crs` module whose `CRS97` is the simulated
+robot in that scene, runs the script as `__main__` with its own arguments and
+prints a verdict when it ends (also on an error or Ctrl+C):
+
+```
+[crs_sim] Verdict:
+Scene: puzzle C at x=0.475 y=0.159 z=0.0050 m, yaw=1.732 rad
+  0 contact(s)
+  hoop threaded down to 20 mm above the base plate
+```
+
+Scene options go **before** the script, everything after it goes to the
+script. `./sim.sh --help` lists them all, the main ones:
+
+| Option | Meaning |
+| :--- | :--- |
+| `--puzzle A..E\|none`, `--seed N` or `--x --y --yaw`, `--table-z` | which puzzle and where (random placement with `--seed`) |
+| `--rod static\|oscillating\|circular`, `--rod-x/y/amplitude/period` | a (moving) rod instead of / next to the puzzle |
+| `--lag`, `--noise`, `--camera-width/height/fov` | the overhead camera |
+| `--speedup`, `--headless`, `--on-contact`, `--contact-margin` | as the `CRS97(...)` options below |
+| `--export-calib PATH` | save the simulated camera's calibration (`K`, `dist`, `T_base_camera`, size) as `.npz` |
+
+Camera calibration is the one thing that differs between the two worlds, so
+the solution loads it from a file (`--calib`, `src/perception.py`): the
+simulator's from `--export-calib`, the real camera's from your own
+calibration in the same format. Use the same `--camera-*` options for
+exporting and running.
+
+`src/main.py`, `perception.py` and `planning.py` are a skeleton with TODOs.
+`tests/test_launch.py` runs `src/main.py` headless through the launcher
+and checks that nothing in `src/` imports `crs_sim`.
+
 ## Usage
 
 ```python

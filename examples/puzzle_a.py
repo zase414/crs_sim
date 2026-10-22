@@ -45,7 +45,7 @@ def main():
     table_top = MAZE_POSE[2, 3] - BASE_PLATE_THICKNESS
     robot.viz.show_box("table", [1.2, 1.2, 0.02],
                        translation([0.3, 0, table_top - 0.01]), color=0x8b6b4a)
-    robot.add_object(Puzzle("A", MAZE_POSE))
+    robot.add_object(Puzzle("D", MAZE_POSE))
     robot.viz.show_points("path", (MAZE_POSE @ densify(maze_path("A"), 0.01))[:, :3, 3],
                           color=0xff0000, radius=0.003)
 

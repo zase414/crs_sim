@@ -164,6 +164,7 @@ class CRSRobot(DHKinematics):
         self._contact_cond = threading.Condition()
         self._contact_idle = True
         self._object_names: dict[int, str] = {}
+        self._monitors: list = []
 
         self.viz = None
         if visualize:
@@ -375,6 +376,15 @@ class CRSRobot(DHKinematics):
         if self.viz is not None:
             self.viz.delete("contacts")
 
+    def add_monitor(self, callback) -> None:
+        """
+        Call ``callback(q, t)`` for every sample of the executed path, the
+        same dense samples the contact check uses (in order, from the
+        contact checking thread). Contact checking starts if it is not running.
+        """
+        self._start_contact_checking()
+        self._monitors.append(callback)
+
     def in_contact(self, q: ArrayLike | None = None) -> bool:
         """Whether the robot touches an added object at q (now if None)."""
         if self.contact_checker is None:
@@ -490,6 +500,8 @@ class CRSRobot(DHKinematics):
                     self._contact_cond.wait(min(0.005, t - now))
 
     def _check_contact(self, q: np.ndarray, t: float) -> None:
+        for callback in self._monitors:
+            callback(q, t)
         contacts = self.contact_checker.check(q, t)
         if contacts and not self._in_contact:
             event = ContactEvent(t, q, contacts)
