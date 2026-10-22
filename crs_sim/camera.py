@@ -90,8 +90,8 @@ class Camera:
     :param bgr: return images in BGR channel order (OpenCV convention)
     :param seed: seed of the noise / jitter generator
     """
-    def __init__(self, pose: np.ndarray | None = None, width: int = 800,
-                 height: int = 600, fov: float = np.deg2rad(60),
+    def __init__(self, pose: np.ndarray | None = None, width: int = 2448,
+                 height: int = 2050, fov: float = np.deg2rad(60),
                  lag: float = 0.1, lag_jitter: float = 0.0,
                  fps: float | None = 30.0, noise: float = 2.0,
                  background: ArrayLike = (60, 60, 60), bgr: bool = True,
@@ -255,7 +255,7 @@ class Camera:
         # each point covers about (spacing projected) pixels, splat it as a
         # square of that size so that no holes appear between the points
         f = self.K[0, 0]
-        size = np.clip(np.ceil(spacing[keep] * f / depth), 1, 5).astype(int)
+        size = np.clip(np.ceil(1.5 * spacing[keep] * f / depth), 1, 8).astype(int)
         us, vs, ds, idx = [], [], [], []
         base = np.floor(uv).astype(int)
         for s in np.unique(size):

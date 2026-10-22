@@ -224,7 +224,7 @@ All of these are keyword arguments of `CRS97(...)`:
 
 `robot.camera` is a pinhole camera 1.6 m above the workspace looking straight
 down (base +x points up in the image). `robot.grab_image()` renders the robot,
-the hoop and every object added with `robot.add_object` into an 800x600 BGR
+the hoop and every object added with `robot.add_object` into an 2448x2050 BGR
 image, the way it looked `lag` seconds ago:
 
 ```python
