@@ -62,7 +62,7 @@ def test_real_robot_script_runs_in_scene(tmp_path, puzzle_files, bump):
                     *(["--bump"] if bump else []))
     out = result.stdout
     assert result.returncode == 3, result.stderr
-    assert "image (600, 800, 3)" in out
+    assert "image (2050, 2448, 3)" in out
     assert "puzzle A at x=0.450" in out
     assert f"{int(bump)} contact(s)" in out
     assert "hoop threaded down to" in out

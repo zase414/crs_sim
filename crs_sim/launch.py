@@ -169,8 +169,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     cam = parser.add_argument_group("camera")
     cam.add_argument("--lag", type=float, default=0.1, help="input lag [s]")
     cam.add_argument("--noise", type=float, default=2.0, help="pixel noise (std)")
-    cam.add_argument("--camera-width", type=int, default=800)
-    cam.add_argument("--camera-height", type=int, default=600)
+    cam.add_argument("--camera-width", type=int, default=2448)
+    cam.add_argument("--camera-height", type=int, default=2050)
     cam.add_argument("--camera-fov", type=float, default=60.0,
                      help="horizontal field of view [deg]")
 
