@@ -97,6 +97,7 @@ class MovingRod:
         self.t0 = time.monotonic()
         self._viz = None
         self._name = None
+        self._collision = None
 
     def restart(self) -> None:
         """Start the trajectory again from t = 0."""
@@ -116,6 +117,16 @@ class MovingRod:
 
     def surfaces_at(self, t: float) -> list[tuple[Surface, np.ndarray]]:
         return [(self.surface, self.pose(t))]
+
+    def collision_geometries_at(self, t: float):
+        """[(name, coal geometry, 4x4 pose)] for the contact checker."""
+        if self._collision is None:
+            import coal
+
+            self._collision = coal.Cylinder(self.radius, self.length)
+        # coal cylinders are centered on their origin
+        return [("rod", self._collision,
+                 self.pose(t) @ translation([0, 0, self.length / 2]))]
 
     def attach(self, viz, name: str = "rod", fps: float = 30.0) -> None:
         """

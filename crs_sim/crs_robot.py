@@ -19,6 +19,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from .camera import Camera, RobotBody
+from .contact import ContactError, ContactEvent
 from .gripper import Gripper
 from .kinematics import DHKinematics
 
@@ -48,6 +49,10 @@ _QUINTIC_PEAK = 1.875
 # How long the joint history is kept, longer than any camera lag [s]
 _HISTORY_DURATION = 10.0
 
+# Conservative distance of any robot point from any joint axis, bounds how
+# far a point moves for a given joint step [m]
+_REACH = 0.8
+
 
 class CRSRobot(DHKinematics):
     """
@@ -63,6 +68,14 @@ class CRSRobot(DHKinematics):
     :param camera: overhead camera returned by ``grab_image``: True for the
         default one (:class:`crs_sim.camera.Camera`), a ``Camera`` to
         configure it, False for none
+    :param on_contact: what happens when the robot touches an added object
+        (see ``contacts``): "warn" prints it and marks the spot in the viewer,
+        "raise" also raises ContactError from the next move_to_q /
+        wait_for_motion_stop, "ignore" only records it
+    :param contact_resolution: largest distance any robot point moves between
+        two contact checks along a motion [m]
+    :param contact_margin: count it as contact already when the robot is
+        closer than this to an object [m]
     :param crs_kwargs: robot parameters (see ``crs97.CRS97_PARAMS``)
     """
     def __init__(
@@ -77,6 +90,9 @@ class CRSRobot(DHKinematics):
         q0: ArrayLike | None = None,
         render_fps: float = 30.0,
         camera: bool | Camera = True,
+        on_contact: str = "warn",
+        contact_resolution: float = 0.001,
+        contact_margin: float = 0.0,
         **crs_kwargs,
     ) -> None:
         super().__init__(link_lengths=[0.3052, 0.3048, 0.3302, 0.0762])
@@ -131,6 +147,23 @@ class CRSRobot(DHKinematics):
         self._motion = _Motion(q0.copy(), q0.copy(), time.monotonic(), 0.0)
         # recent motions, so that q can be looked up in the past (camera lag)
         self._motions: deque[_Motion] = deque([self._motion])
+
+        if on_contact not in ("warn", "raise", "ignore"):
+            raise ValueError(f"on_contact must be warn, raise or ignore, not {on_contact!r}")
+        self.on_contact = on_contact
+        self.contact_resolution = contact_resolution
+        self.contact_margin = contact_margin
+        #: crs_sim.contact.ContactChecker, created when the first object with
+        #: collision geometry is added
+        self.contact_checker = None
+        self._contact_events: list[ContactEvent] = []
+        self._contacts_raised = 0
+        self._in_contact = False
+        # motions not fully checked yet, the first one is being checked
+        self._contact_queue: deque[_Motion] = deque()
+        self._contact_cond = threading.Condition()
+        self._contact_idle = True
+        self._object_names: dict[int, str] = {}
 
         self.viz = None
         if visualize:
@@ -254,6 +287,7 @@ class CRSRobot(DHKinematics):
         movement. Non-blocking, use wait_for_motion_stop() to wait."""
         assert self._initialized, "You need to initialize the robot before moving it."
         assert self.in_limits(q), "Joint limits violated."
+        self._raise_contacts()
         self._start_motion(q)
 
     def get_q(self) -> np.ndarray:
@@ -270,6 +304,10 @@ class CRSRobot(DHKinematics):
                      - time.monotonic())
         if remaining > 0:
             time.sleep(remaining)
+        # the contact check of the motion may still be catching up
+        with self._contact_cond:
+            self._contact_cond.wait_for(lambda: self._contact_idle)
+        self._raise_contacts()
 
     def in_limits(self, q: ArrayLike) -> bool:
         """Return whether the given joint configuration is in joint limits."""
@@ -291,15 +329,58 @@ class CRSRobot(DHKinematics):
 
     def add_object(self, obj, name: str | None = None) -> None:
         """
-        Add an object (e.g. a crs_sim.rod.MovingRod) to the scene: the camera
-        renders it and the viewer shows it.
-        :param obj: object with ``surfaces_at(t)`` and optionally ``attach(viz, name)``
-        :param name: name in the viewer, defaults to the class name
+        Add an object (e.g. a crs_sim.puzzles.Puzzle or a
+        crs_sim.rod.MovingRod) to the scene: the camera renders it, the
+        viewer shows it and touching it is detected (see ``contacts``).
+        :param obj: object with ``surfaces_at(t)`` and optionally
+            ``attach(viz, name)`` and ``collision_geometries_at(t)``
+        :param name: name in the viewer, the object's default if None
         """
         if self.camera is not None:
             self.camera.add(obj)
         if self.viz is not None and hasattr(obj, "attach"):
-            obj.attach(self.viz, name or type(obj).__name__.lower())
+            if name is None:
+                obj.attach(self.viz)
+            else:
+                obj.attach(self.viz, name)
+        if hasattr(obj, "collision_geometries_at"):
+            self._start_contact_checking()
+            self.contact_checker.add(obj)
+
+    def remove_object(self, obj) -> None:
+        """Remove an object added with add_object from the scene."""
+        if self.camera is not None and obj in self.camera.objects:
+            self.camera.remove(obj)
+        if self.contact_checker is not None:
+            self.contact_checker.remove(obj)
+        if hasattr(obj, "detach"):
+            obj.detach()
+
+    @property
+    def contacts(self) -> list[ContactEvent]:
+        """
+        Every time the robot started touching an added object, in the order
+        it happened (a contact lasting over several checks is one event).
+        Every executed motion is checked, finely enough that no robot point
+        moves more than ``contact_resolution`` between two checks.
+        """
+        with self._contact_cond:
+            return list(self._contact_events)
+
+    def clear_contacts(self) -> None:
+        """Forget the recorded contacts (e.g. before the next attempt)."""
+        with self._contact_cond:
+            self._contact_events.clear()
+            self._contacts_raised = 0
+        if self.viz is not None:
+            self.viz.delete("contacts")
+
+    def in_contact(self, q: ArrayLike | None = None) -> bool:
+        """Whether the robot touches an added object at q (now if None)."""
+        if self.contact_checker is None:
+            return False
+        q = self.get_q() if q is None else np.asarray(q, dtype=float)
+        return bool(self.contact_checker.check(q))
 
     # ------------------------------------------------------------------
     # Simulation internals
@@ -319,6 +400,11 @@ class CRSRobot(DHKinematics):
                     / self.speedup)
         self._motion = _Motion(q_start, q_goal, now, float(duration))
         self._motions.append(self._motion)
+        if self.contact_checker is not None:
+            with self._contact_cond:
+                self._contact_queue.append(self._motion)
+                self._contact_idle = False
+                self._contact_cond.notify_all()
         while (len(self._motions) > 1
                and self._motions[1].t_start < now - _HISTORY_DURATION):
             self._motions.popleft()
@@ -336,3 +422,93 @@ class CRSRobot(DHKinematics):
                 if not moving:
                     break
                 time.sleep(self._render_period)
+
+    # ------------------------------------------------------------------
+    # Contact checking
+    # ------------------------------------------------------------------
+    def _start_contact_checking(self) -> None:
+        """Create the checker and check motions from now on."""
+        if self.contact_checker is not None:
+            return
+        from .contact import ContactChecker
+
+        self.contact_checker = ContactChecker(self.urdf_path,
+                                              margin=self.contact_margin)
+        with self._contact_cond:
+            now = time.monotonic()
+            q = self._motion.q_at(now)
+            # check from the current configuration on
+            self._contact_queue.append(
+                _Motion(q, self._motion.q_goal, now,
+                        max(0.0, self._motion.t_start + self._motion.duration
+                            - now))
+                if not self._motion.finished(now) else _Motion(q, q, now, 0.0))
+            self._contact_idle = False
+        threading.Thread(target=self._contact_loop, daemon=True).start()
+
+    def _contact_samples(self, motion: _Motion) -> int:
+        """Number of check intervals along a motion."""
+        dq = np.sum(np.abs(motion.q_goal - motion.q_start))
+        return int(np.ceil(_QUINTIC_PEAK * _REACH * dq / self.contact_resolution))
+
+    def _contact_loop(self) -> None:
+        """
+        Check the executed part of every motion, in order, keeping up with
+        real time: a sample is checked once the robot has passed it, so a
+        motion replaced by the next move_to_q is only checked up to where
+        the robot really was.
+        """
+        k = 0
+        while True:
+            with self._contact_cond:
+                motion = self._contact_queue[0]
+                nxt = self._contact_queue[1] if len(self._contact_queue) > 1 else None
+            n = self._contact_samples(motion)
+            t_end = np.inf if nxt is None else nxt.t_start
+            now = time.monotonic()
+            while k <= n:
+                t = motion.t_start + (motion.duration * k / n if n else 0.0)
+                if t > now or (k > 0 and t > t_end):
+                    break
+                self._check_contact(motion.q_at(t), t)
+                k += 1
+            done = k > n or (nxt is not None and t > t_end)
+            with self._contact_cond:
+                if done and len(self._contact_queue) > 1:
+                    self._contact_queue.popleft()
+                    k = 0
+                    continue
+                if done:
+                    self._contact_idle = True
+                    self._contact_cond.notify_all()
+                    self._contact_cond.wait_for(
+                        lambda: len(self._contact_queue) > 1)
+                    self._contact_queue.popleft()
+                    k = 0
+                else:
+                    # caught up with the robot, wait for it to move on
+                    self._contact_cond.wait(min(0.005, t - now))
+
+    def _check_contact(self, q: np.ndarray, t: float) -> None:
+        contacts = self.contact_checker.check(q, t)
+        if contacts and not self._in_contact:
+            event = ContactEvent(t, q, contacts)
+            with self._contact_cond:
+                self._contact_events.append(event)
+            if self.on_contact != "ignore":
+                print(f"CONTACT: {event}")
+                if self.viz is not None:
+                    points = [c.point for e in self.contacts for c in e.contacts]
+                    self.viz.show_points("contacts", np.array(points),
+                                         color=0xff0000, radius=0.004)
+        self._in_contact = bool(contacts)
+
+    def _raise_contacts(self) -> None:
+        """Raise ContactError for a contact not raised yet (on_contact="raise")."""
+        if self.on_contact != "raise":
+            return
+        with self._contact_cond:
+            if self._contacts_raised < len(self._contact_events):
+                event = self._contact_events[self._contacts_raised]
+                self._contacts_raised = len(self._contact_events)
+                raise ContactError(event)
