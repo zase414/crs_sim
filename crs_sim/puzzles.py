@@ -1,15 +1,21 @@
 """
-The ROB1 hoop-and-wire puzzles (A - E): CAD models and the wire center line
-of puzzle A.
+The ROB1 hoop-and-wire puzzles (A - E) as scene objects: CAD models, ArUco
+markers of the base plate and contact checking, plus the wire center line of
+puzzle A as an example of a path.
 
-Each puzzle is a bent wire on a base plate. The task is to thread the hoop
-mounted on the robot over the wire from its free end down to the base and back
-without touching it. The CAD models (STEP) come from
+Each puzzle is a bent 10x10 mm wire plugged into a base plate. The task is to
+thread the hoop mounted on the robot over the wire from its free end down to
+the base and back without touching it. The CAD models (STEP) come from
 https://github.com/pilcsimo/ROB1-2025-hw (GPL-3.0) and are downloaded on demand
 by :func:`download_puzzles`, they are not part of this package.
 
-Frames: a maze frame has its origin in the center of the base plate top, z up.
-Paths are hoop-center poses whose z axis is tangent to the wire.
+    puzzle = Puzzle("B", random_pose(seed))
+    robot.add_object(puzzle)     # viewer + camera + contact checking
+
+Frames: a maze frame has its origin where the wire stands on the base plate
+top (the plate center), z up. The base plate frame is the center of the
+plate's bottom face, ``BASE_PLATE_THICKNESS`` below. Paths are hoop-center
+poses whose z axis is tangent to the wire.
 """
 from __future__ import annotations
 
@@ -19,14 +25,22 @@ from pathlib import Path
 
 import numpy as np
 
-from .transforms import densify, rx, rz, translation
+from .transforms import densify, pose, rx, rz, translation
 
 #: Hoop center in the flange frame returned by ``CRS97.fk``. The wire passes
 #: through the hoop along this frame's z axis.
 HOOP_IN_FLANGE = translation([-0.135, 0.0, 0.012])
+#: Inner radius of the hoop opening [m]
+HOOP_INNER_RADIUS = 0.03
 
 #: Base plate thickness, the puzzle stands on its top face [m]
-BASE_PLATE_THICKNESS = 0.0056
+BASE_PLATE_THICKNESS = 0.005
+#: The black marker cells stand out of the plate top by [m]
+MARKER_HEIGHT = 0.0006
+#: ArUco markers on the base plate (DICT_4X4_50): side length [m] and
+#: id -> center [x, y] in the maze frame
+MARKER_SIZE = 0.04
+MARKER_CENTERS = {1: (-0.0375, 0.0375), 2: (0.0375, -0.0375)}
 
 PUZZLES_REPO_URL = "https://github.com/pilcsimo/ROB1-2025-hw"
 _RAW_URL = "https://raw.githubusercontent.com/pilcsimo/ROB1-2025-hw/main/"
@@ -109,11 +123,205 @@ def maze_path(name: str) -> np.ndarray:
     return np.array(poses)[keep]
 
 
+
+
+# ----------------------------------------------------------------------
+# Puzzle in the scene
+# ----------------------------------------------------------------------
+class Puzzle:
+    """
+    A puzzle (wire A - E plugged into the base plate with the two ArUco
+    markers) standing in the workspace. Add it to the robot to get it drawn
+    in the viewer, rendered by the camera and checked for contacts::
+
+        puzzle = Puzzle("C", pose([0.45, 0.05, 0.0], yaw=0.3))
+        robot.add_object(puzzle)
+        ...
+        robot.contacts        # every time the robot touched the puzzle
+
+    The meshes come from the STEP files (downloaded on first use, needs the
+    ``step`` extra). The base plate is white with raised black marker cells,
+    as printed, so the markers can be detected in ``robot.grab_image()``
+    (``cv2.aruco``, DICT_4X4_50, IDs 1 and 2, 40 mm).
+
+    :param name: "A" - "E"
+    :param pose: 4x4 pose of the maze frame (wire origin on the base plate
+        top, z up) in the robot base frame
+    :param color: wire color
+    :param base_color: base plate color
+    :param marker_color: color of the raised marker cells
+    :param spacing: camera surface sampling distance [m]
+    """
+    def __init__(self, name: str, pose: np.ndarray, color: int = 0xffa500,
+                 base_color: int = 0xf0f0f0, marker_color: int = 0x202020,
+                 spacing: float = 0.0015,
+                 cache_dir: str | Path | None = None) -> None:
+        from .visualizer import load_mesh
+
+        if name not in "ABCDE" or len(name) != 1:
+            raise ValueError(f"Unknown puzzle {name!r}, use A - E")
+        self.name = name
+        self.color, self.base_color, self.marker_color = (color, base_color,
+                                                          marker_color)
+        self.spacing = spacing
+        self._pose = np.array(pose, dtype=float)
+        files = download_puzzles(cache_dir, names=[name, "base"])
+        self.wire_mesh = load_mesh(files[name])
+        base = load_mesh(files["base"])
+        # the raised marker cells are the only faces above the plate top
+        top = np.asarray(base.vertices)[np.asarray(base.faces)][:, :, 2].max(axis=1)
+        raised = top > BASE_PLATE_THICKNESS + 1e-4
+        self.base_mesh = base
+        self._base_faces = (np.asarray(base.faces)[~raised],
+                            np.asarray(base.faces)[raised])
+        self._surfaces = None
+        self._collision = None
+        self._opening = None
+        self._viz = None
+        self._viz_name = None
+
+    # -- placement ------------------------------------------------------
+    @property
+    def pose(self) -> np.ndarray:
+        """4x4 pose of the maze frame in the robot base frame."""
+        return self._pose.copy()
+
+    @pose.setter
+    def pose(self, pose: np.ndarray) -> None:
+        self._pose = np.array(pose, dtype=float)
+        if self._viz is not None:
+            for part in ("wire", "base", "markers"):
+                self._viz.set_pose(f"{self._viz_name}/{part}",
+                                   self._part_pose(part))
+
+    @property
+    def base_pose(self) -> np.ndarray:
+        """4x4 pose of the base plate frame (bottom face center)."""
+        return self._pose @ translation([0, 0, -BASE_PLATE_THICKNESS])
+
+    def _part_pose(self, part: str) -> np.ndarray:
+        return self._pose if part == "wire" else self.base_pose
+
+    def marker_poses(self) -> dict[int, np.ndarray]:
+        """
+        Ground truth marker poses: marker ID -> 4x4 pose of the marker center
+        on its top face, axes as the maze frame (x right, y up in the marker
+        image, z out of the plate).
+        """
+        return {i: self.base_pose @ translation([*xy, BASE_PLATE_THICKNESS
+                                                 + MARKER_HEIGHT])
+                for i, xy in MARKER_CENTERS.items()}
+
+    def marker_corners(self) -> dict[int, np.ndarray]:
+        """
+        Ground truth marker corners: marker ID -> 4x3 points in the robot base
+        frame, in the ``cv2.aruco`` order (top-left, top-right, bottom-right,
+        bottom-left of the marker image).
+        """
+        h = MARKER_SIZE / 2
+        local = np.array([[-h, h, 0, 1], [h, h, 0, 1], [h, -h, 0, 1],
+                          [-h, -h, 0, 1]])
+        return {i: (p @ local.T).T[:, :3] for i, p in self.marker_poses().items()}
+
+    # -- camera ---------------------------------------------------------
+    def load(self) -> None:
+        """Sample the surfaces for the camera (done on first use)."""
+        if self._surfaces is not None:
+            return
+        from .camera import color_rgb, sample_mesh
+
+        plate, cells = self._base_faces
+        verts = np.asarray(self.base_mesh.vertices)
+        self._surfaces = [
+            ("wire", sample_mesh(self.wire_mesh.vertices, self.wire_mesh.faces,
+                                 self.spacing, color_rgb(self.color))),
+            ("base", sample_mesh(verts, plate, self.spacing,
+                                 color_rgb(self.base_color))),
+            ("markers", sample_mesh(verts, cells, self.spacing / 2,
+                                    color_rgb(self.marker_color))),
+        ]
+
+    def surfaces_at(self, t: float):
+        self.load()
+        return [(s, self._part_pose(part)) for part, s in self._surfaces]
+
+    # -- contacts -------------------------------------------------------
+    def collision_geometries_at(self, t: float):
+        """[(name, coal geometry, 4x4 pose), ...] for the contact checker."""
+        if self._collision is None:
+            from .contact import mesh_geometry
+
+            self._collision = [
+                ("wire", mesh_geometry(self.wire_mesh.vertices,
+                                       self.wire_mesh.faces)),
+                ("base", mesh_geometry(self.base_mesh.vertices,
+                                       self.base_mesh.faces)),
+            ]
+        return [(f"puzzle_{self.name}/{part}", geom, self._part_pose(part))
+                for part, geom in self._collision]
+
+    def wire_through_hoop(self, hoop_pose: np.ndarray) -> bool:
+        """
+        Whether the wire passes through the hoop opening, i.e. the hoop is
+        threaded on the wire (touching it or not, see ``robot.contacts``).
+        :param hoop_pose: 4x4 hoop center pose, ``robot.fk(q) @ HOOP_IN_FLANGE``
+        """
+        import coal
+
+        if self._opening is None:
+            self._opening = coal.Cylinder(HOOP_INNER_RADIUS, 0.001)
+        wire = self.collision_geometries_at(0.0)[0][1]
+        tf = [coal.Transform3s(p[:3, :3], p[:3, 3])
+              for p in (np.asarray(hoop_pose, dtype=float), self._pose)]
+        return coal.collide(self._opening, tf[0], wire, tf[1],
+                            coal.CollisionRequest(), coal.CollisionResult()) > 0
+
+    # -- viewer ---------------------------------------------------------
+    def attach(self, viz, name: str | None = None) -> None:
+        """Draw the puzzle in the viewer (crs_sim.Visualizer)."""
+        import trimesh
+
+        self._viz, self._viz_name = viz, name or f"puzzle_{self.name}"
+        plate, cells = self._base_faces
+        verts = np.asarray(self.base_mesh.vertices)
+        viz.show_mesh(f"{self._viz_name}/wire", self.wire_mesh, self.pose,
+                      color=self.color)
+        viz.show_mesh(f"{self._viz_name}/base",
+                      trimesh.Trimesh(verts, plate, process=False),
+                      self.base_pose, color=self.base_color)
+        viz.show_mesh(f"{self._viz_name}/markers",
+                      trimesh.Trimesh(verts, cells, process=False),
+                      self.base_pose, color=self.marker_color)
+
+    def detach(self) -> None:
+        """Remove the puzzle from the viewer."""
+        if self._viz is not None:
+            self._viz.delete(self._viz_name)
+            self._viz = None
+
+
+def random_pose(rng: np.random.Generator | int | None = None,
+                x: tuple[float, float] = (0.35, 0.55),
+                y: tuple[float, float] = (-0.2, 0.2),
+                yaw: tuple[float, float] = (-np.pi, np.pi),
+                table_z: float = 0.0) -> np.ndarray:
+    """
+    Random puzzle placement on the table, uniform in the given ranges.
+    :param rng: numpy Generator or seed
+    :param table_z: height of the table top in the robot base frame [m]
+    :return: 4x4 maze pose for :class:`Puzzle`
+    """
+    rng = np.random.default_rng(rng)
+    return pose([rng.uniform(*x), rng.uniform(*y),
+                 table_z + BASE_PLATE_THICKNESS], rng.uniform(*yaw))
+
+
 def show_puzzle(viz, name: str, maze_pose: np.ndarray, cad: bool = True,
                 path: bool = True, color: int = 0xffa500) -> None:
     """
-    Draw a puzzle into the scene: base plate and wire from the STEP models
-    (downloaded on first use) and/or the wire center line.
+    Draw a puzzle into the viewer only (no camera, no contacts, see
+    :class:`Puzzle` and ``robot.add_object`` for that): base plate and wire
+    from the STEP models (downloaded on first use) and/or the wire center line.
     :param viz: crs_sim.Visualizer (``robot.viz``)
     :param name: "A" - "E"
     :param maze_pose: 4x4 pose of the maze frame in the robot base frame
@@ -122,11 +330,7 @@ def show_puzzle(viz, name: str, maze_pose: np.ndarray, cad: bool = True,
     :param color: color of the wire
     """
     if cad:
-        files = download_puzzles(names=[name, "base"])
-        viz.show_mesh(f"puzzle_{name}/wire", files[name], maze_pose, color=color)
-        viz.show_mesh(f"puzzle_{name}/base", files["base"],
-                      maze_pose @ translation([0, 0, -BASE_PLATE_THICKNESS]),
-                      color=0xf0f0f0)
+        Puzzle(name, maze_pose, color=color).attach(viz)
     if path and name in MAZES:
         points = (maze_pose @ densify(maze_path(name), 0.01))[:, :3, 3]
         viz.show_points(f"puzzle_{name}/path", points, color=0xff0000,

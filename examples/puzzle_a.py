@@ -5,16 +5,17 @@ workspace and move the hoop down the wire and back.
     ./start.sh examples/puzzle_a.py
 
 This is NOT a solver: the joint values below were picked for this one
-placement of the puzzle. It shows how to put a puzzle into the scene, how to
-get the hoop pose from the joint configuration (fk @ HOOP_IN_FLANGE) and how
-to execute motions with the ctu_crs interface (move_to_q /
-wait_for_motion_stop), which work the same way on the real robot.
+placement of the puzzle. It shows how to put a puzzle into the scene (drawn,
+seen by the camera and checked for contacts), how to get the hoop pose from
+the joint configuration (fk @ HOOP_IN_FLANGE) and how to execute motions with
+the ctu_crs interface (move_to_q / wait_for_motion_stop), which work the same
+way on the real robot.
 """
 import numpy as np
 
 from crs_sim import CRS97
-from crs_sim.puzzles import BASE_PLATE_THICKNESS, HOOP_IN_FLANGE, show_puzzle
-from crs_sim.transforms import pose, translation
+from crs_sim.puzzles import BASE_PLATE_THICKNESS, HOOP_IN_FLANGE, Puzzle, maze_path
+from crs_sim.transforms import densify, pose, translation
 
 # Puzzle A placed 0.45 m in front of the robot, base plate top at z = 0.031 m
 MAZE_POSE = pose([0.45, 0.0, 0.031], yaw=0.0)
@@ -40,11 +41,13 @@ def main():
     robot = CRS97(speedup=2.0)
     robot.initialize()
 
-    # Scene: table under the base plate, puzzle CAD model and wire center line
+    # Scene: table under the base plate, the puzzle and its wire center line
     table_top = MAZE_POSE[2, 3] - BASE_PLATE_THICKNESS
     robot.viz.show_box("table", [1.2, 1.2, 0.02],
                        translation([0.3, 0, table_top - 0.01]), color=0x8b6b4a)
-    show_puzzle(robot.viz, "A", MAZE_POSE)
+    robot.add_object(Puzzle("A", MAZE_POSE))
+    robot.viz.show_points("path", (MAZE_POSE @ densify(maze_path("A"), 0.01))[:, :3, 3],
+                          color=0xff0000, radius=0.003)
 
     wire_axis = MAZE_POSE[:2, 3]
     for q in list(KEYFRAMES) + list(KEYFRAMES[::-1]):
@@ -56,6 +59,7 @@ def main():
               f"{1000 * np.linalg.norm(c[:2] - wire_axis):.1f} mm from the wire axis")
 
     robot.soft_home()
+    print(f"{len(robot.contacts)} contact(s) with the puzzle")
 
 
 if __name__ == "__main__":

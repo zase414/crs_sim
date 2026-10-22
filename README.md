@@ -65,6 +65,7 @@ Run them with `./start.sh examples/<name>.py`, all take `--help`.
 | Example | What it shows |
 | :--- | :--- |
 | `demo.py` | Reach a target pose with IK, draw frames |
+| `puzzle_env.py [--puzzle C] [--seed 7] [--image f.png] [--trajectory q.txt]` | The puzzle task as an environment: any puzzle placed on the table, ground truth printed, camera frame saved, a joint trajectory replayed and judged (contacts, how far down the wire the hoop got) |
 | `puzzle_a.py` | Puzzle A in the workspace, the hoop moved down the wire and back through fixed joint configurations |
 | `hoop_on_rod.py [--lag 0.3] [--no-predict]` | Track a moving rod in the lagged overhead camera image and slide the hoop onto it |
 | `show_cad.py [files...]` | Show any STEP/STL/OBJ file in the workspace; without arguments all five puzzles |
@@ -72,24 +73,69 @@ Run them with `./start.sh examples/<name>.py`, all take `--help`.
 | `joint_sweep.py` | Joint limits table and each joint swept towards its limits |
 | `real_or_sim.py [--real]` | The same control code on the simulator or the real robot |
 
-## Puzzles and CAD files
+## Puzzles: a virtual replacement of the physical task
 
-`crs_sim.puzzles` has the hoop offset `HOOP_IN_FLANGE` (hoop center pose =
-`robot.fk(q) @ HOOP_IN_FLANGE`), `show_puzzle()` to put any of the puzzles A - E
-into the scene, and the wire center line of puzzle A as an example
-(`maze_path("A")`, hoop poses in the maze frame).
+All five puzzles (A - E) of the ROB1 task are scene objects: the bent
+10x10 mm wire plugged into the base plate with the ArUco markers 1 and 2
+(`DICT_4X4_50`, 40 mm, raised black cells on a white plate, as printed).
+Added to the robot, a puzzle is drawn in the viewer, rendered by the camera
+(`grab_image`) and **every touch of the robot is detected**:
+
+```python
+import numpy as np
+from crs_sim import CRS97
+from crs_sim.puzzles import HOOP_IN_FLANGE, Puzzle, random_pose
+from crs_sim.transforms import pose
+
+robot = CRS97()                                   # on_contact="warn" | "raise" | "ignore"
+puzzle = Puzzle("C", random_pose(seed=7))         # or Puzzle("C", pose([0.45, 0.05, 0.005], yaw=0.3))
+robot.add_object(puzzle)
+robot.initialize()
+
+image = robot.grab_image()      # find the markers here, like on the real robot
+...                             # your solution: move_to_q / wait_for_motion_stop
+robot.contacts                  # [ContactEvent(time, q, [Contact(link, obstacle, point)])]
+robot.clear_contacts()          # before the next attempt
+
+# ground truth, to evaluate your perception
+puzzle.pose                     # maze frame (wire origin on the plate top) in the base frame
+puzzle.marker_corners()         # {1: 4x3, 2: 4x3} corners in cv2.aruco order
+puzzle.marker_poses()           # {1: 4x4, 2: 4x4}
+puzzle.wire_through_hoop(robot.fk(q) @ HOOP_IN_FLANGE)   # is the hoop on the wire
+```
+
+How contacts are checked: the robot's exact URDF meshes (hoop, adapter and
+all links) against the puzzle's CAD meshes (wire and base plate), mesh-mesh
+collision with coal (comes with pinocchio). Every executed motion is checked
+in a background thread, densely enough that no robot point moves more than
+`contact_resolution` (1 mm) between two checks; a motion interrupted by the
+next `move_to_q` is checked only as far as the robot got. One touch
+(however long) is one event, printed and marked red in the viewer.
+`wait_for_motion_stop` returns once the motion is checked, so `robot.contacts`
+is complete afterwards, also with `speedup=np.inf`. With
+`on_contact="raise"`, the next `wait_for_motion_stop` / `move_to_q` raises
+`crs_sim.ContactError`. `contact_margin` counts near misses as contacts too;
+`robot.contact_checker.distance(q, links=["hoop"])` gives the clearance.
+The moving rod is checked the same way.
+
+`random_pose(seed, x=(0.35, 0.55), y=(-0.2, 0.2), yaw=(-pi, pi), table_z=0)`
+draws a placement; `puzzle.pose = ...` moves a puzzle, `robot.remove_object`
+removes it. `examples/puzzle_env.py --trajectory q.txt` replays a list of
+joint configurations and prints a verdict.
 
 The CAD models come from [pilcsimo/ROB1-2025-hw](https://github.com/pilcsimo/ROB1-2025-hw)
 (GPL-3.0). They are **not** included here; `download_puzzles()` fetches them to
-`~/.cache/crs_sim/` on first use.
+`~/.cache/crs_sim/` on first use (needs the `step` extra). `crs_sim.puzzles`
+also has the hoop offset `HOOP_IN_FLANGE` (hoop center pose =
+`robot.fk(q) @ HOOP_IN_FLANGE`, the wire passes along its z axis), the hoop
+opening `HOOP_INNER_RADIUS` (30 mm) and the wire center line of puzzle A as an
+example of a path (`maze_path("A")`, hoop poses in the maze frame).
+
+To only draw CAD files (no camera, no contacts):
 
 ```python
-from crs_sim import CRS97
 from crs_sim.puzzles import show_puzzle
-from crs_sim.transforms import pose
-
-robot = CRS97()
-show_puzzle(robot.viz, "D", pose([0.45, 0.0, 0.0], yaw=0.5))   # base plate + wire
+show_puzzle(robot.viz, "D", pose([0.45, 0.0, 0.0], yaw=0.5))
 robot.viz.show_mesh("part", "my_part.step", pose([0.3, 0.2, 0.0]))
 robot.viz.show_mesh("bracket", "bracket.stl", scale=0.001)       # STL in mm
 ```
@@ -127,6 +173,9 @@ All of these are keyword arguments of `CRS97(...)`:
 | `q0` | `q_home` | initial joint configuration |
 | `render_fps` | `30` | render rate during motions |
 | `camera` | `True` | overhead camera for `grab_image`: `True` = default, a `crs_sim.camera.Camera(...)` to configure it, `False` = none |
+| `on_contact` | `"warn"` | touching an added object: `"warn"` prints it and marks it in the viewer, `"raise"` also raises `ContactError`, `"ignore"` only records it in `robot.contacts` |
+| `contact_resolution` | `0.001` | largest motion of any robot point between two contact checks [m] |
+| `contact_margin` | `0.0` | report a contact already when closer than this [m] |
 
 ## Camera and moving rod
 
