@@ -120,6 +120,59 @@ class Visualizer:
             node.set_transform(np.eye(4) if pose is None
                                else np.asarray(pose, dtype=float))
 
+    def show_cylinder(self, name: str, radius: float, length: float,
+                      pose: np.ndarray | None = None, color: int = 0xe03c1e,
+                      opacity: float = 1.0) -> None:
+        """
+        Draw a cylinder, e.g. a rod.
+        :param name: object name
+        :param radius: [m]
+        :param length: [m]
+        :param pose: 4x4 pose of the bottom face center, the axis is its z axis
+        :param color: RGB hex color
+        :param opacity: 0 (invisible) .. 1 (opaque)
+        """
+        import meshcat.geometry as g
+        import meshcat.transformations as tf
+
+        with self._lock:
+            node = self._viz.viewer["objects"][name]
+            # meshcat cylinders are centered and along y
+            node["geometry"].set_object(g.Cylinder(length, radius),
+                                        g.MeshLambertMaterial(
+                color=color, opacity=opacity, transparent=opacity < 1))
+            node["geometry"].set_transform(
+                tf.translation_matrix([0, 0, length / 2])
+                @ tf.rotation_matrix(np.pi / 2, [1, 0, 0]))
+            node.set_transform(np.eye(4) if pose is None
+                               else np.asarray(pose, dtype=float))
+
+    def show_lines(self, name: str, segments: ArrayLike,
+                   color: int = 0x000000) -> None:
+        """
+        Draw line segments.
+        :param name: object name
+        :param segments: Nx2x3 segment end points in the robot base frame [m]
+        :param color: RGB hex color
+        """
+        import meshcat.geometry as g
+
+        points = np.asarray(segments, dtype=float).reshape(-1, 3)
+        with self._lock:
+            self._viz.viewer["objects"][name].set_object(g.LineSegments(
+                g.PointsGeometry(points.T.astype(np.float32)),
+                g.LineBasicMaterial(color=color)))
+
+    def set_pose(self, name: str, pose: np.ndarray) -> None:
+        """
+        Move an already drawn helper object.
+        :param name: object name
+        :param pose: 4x4 homogeneous matrix
+        """
+        with self._lock:
+            self._viz.viewer["objects"][name].set_transform(
+                np.asarray(pose, dtype=float))
+
     def show_mesh(self, name: str, mesh, pose: np.ndarray | None = None,
                   color: int = 0xb0b0b0, opacity: float = 1.0,
                   scale: float = 1.0) -> None:
