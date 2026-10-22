@@ -2,7 +2,7 @@
 Run unmodified real-robot code in the simulator.
 
     python -m crs_sim.launch [scene options] script.py [script arguments]
-    ./sim.sh --puzzle C --seed 7 src/main.py --calib src/calibration/sim.npz
+    ./sim.sh --puzzle C --seed 7 src/main.py
 
 The script is written for the real robot (``from ctu_crs import CRS97``) and
 knows nothing about the simulator. The launcher builds the scene from its own
@@ -28,19 +28,6 @@ import numpy as np
 from .camera import Camera
 from .crs97 import CRS97 as SimCRS97
 from .transforms import pose, translation
-
-
-def export_calibration(path: str | Path, camera: Camera) -> None:
-    """
-    Save the simulated camera's calibration in the format the solution loads
-    for the real camera (numpy .npz):
-    K (3x3), dist (5, zeros), T_base_camera (4x4 camera pose in the robot
-    base frame, OpenCV axes), width, height.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(path, K=camera.K, dist=np.zeros(5), T_base_camera=camera.pose,
-             width=camera.width, height=camera.height)
 
 
 class Scene:
@@ -186,8 +173,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     cam.add_argument("--camera-height", type=int, default=600)
     cam.add_argument("--camera-fov", type=float, default=60.0,
                      help="horizontal field of view [deg]")
-    cam.add_argument("--export-calib", metavar="PATH",
-                     help="save the camera calibration (.npz) and exit if no script is given")
 
     sim = parser.add_argument_group("simulation")
     sim.add_argument("--speedup", type=float, default=1.0,
@@ -198,24 +183,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sim.add_argument("--no-wait", action="store_true",
                      help="exit right after the script, do not keep the viewer open")
 
-    parser.add_argument("script", nargs="?", help="the real-robot script to run")
+    parser.add_argument("script", help="the real-robot script to run")
     parser.add_argument("script_args", nargs=argparse.REMAINDER,
                         help="arguments passed to the script")
-    args = parser.parse_args(argv)
-    if args.script is None and args.export_calib is None:
-        parser.error("give a script to run (or --export-calib)")
-    return args
+    return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     scene = Scene(args)
-    if args.export_calib:
-        export_calibration(args.export_calib, scene.camera())
-        print(f"Camera calibration saved to {args.export_calib}")
-    if args.script is None:
-        return 0
-
     script = Path(args.script).resolve()
     sys.modules["ctu_crs"] = fake_ctu_crs(scene)
     sys.argv = [str(script), *args.script_args]

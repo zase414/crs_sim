@@ -1,4 +1,26 @@
-# crs_sim
+# Jak pouzivat
+
+Write src/main.py as normal real-robot code, starting with from ctu_crs import CRS97.
+
+1. Connected to the real robot (on the lab PC, where ctu_crs is installed):
+
+```python
+python src/main.py
+```
+
+2. In the simulator, with the viewer opening in your browser:
+
+```python
+./sim.sh src/main.py
+```
+
+Options for the simulated scene go before `src/main.py`, for example `./sim.sh --puzzle C --seed 7 src/main.py`. `./sim.sh --help` lists them all.
+
+# ...
+
+# ...
+
+# Andrlik slop
 
 Standalone simulator of the **CRS97** robotic arm. It has the same interface as
 the real robot's driver [`ctu_crs`](https://pypi.org/project/ctu-crs/), so code
@@ -40,50 +62,26 @@ Dependencies: `numpy`, `pin` (pinocchio) and `meshcat`; the optional `step` extr
 (`trimesh`, `cascadio`) loads CAD files. The real-robot packages (`ctu_crs`,
 `pypylon`, serial port drivers) are **not** needed.
 
-## Your solution: `src/` runs unchanged on the robot and in the simulator
+## Your solution: `src/main.py`
 
-The solution lives in `src/` and is plain real-robot code: `from ctu_crs
-import CRS97`, numpy, cv2. It never imports `crs_sim` and does not know a
-scene exists; it sees the world only through the robot interface and
-`robot.grab_image()`.
+`src/main.py` is yours, it starts empty. Write it as plain real-robot code
+(`from ctu_crs import CRS97`), it must not import `crs_sim`. The same file
+runs on both:
 
 ```bash
-python src/main.py --calib src/calibration/lab.npz                        # real CRS97, lab PC
-./sim.sh --puzzle C --seed 7 src/main.py --calib src/calibration/sim.npz  # simulator
+python src/main.py                         # connected to the real robot (ctu_crs installed)
+./sim.sh src/main.py                       # simulator with the viewer
+./sim.sh --puzzle C --seed 7 src/main.py   # other puzzle / random placement
 ```
 
-`./sim.sh` (= `python -m crs_sim.launch`) builds the scene from its own
-options, provides a stand-in `ctu_crs` module whose `CRS97` is the simulated
-robot in that scene, runs the script as `__main__` with its own arguments and
-prints a verdict when it ends (also on an error or Ctrl+C):
-
-```
-[crs_sim] Verdict:
-Scene: puzzle C at x=0.475 y=0.159 z=0.0050 m, yaw=1.732 rad
-  0 contact(s)
-  hoop threaded down to 20 mm above the base plate
-```
-
-Scene options go **before** the script, everything after it goes to the
-script. `./sim.sh --help` lists them all, the main ones:
-
-| Option | Meaning |
-| :--- | :--- |
-| `--puzzle A..E\|none`, `--seed N` or `--x --y --yaw`, `--table-z` | which puzzle and where (random placement with `--seed`) |
-| `--rod static\|oscillating\|circular`, `--rod-x/y/amplitude/period` | a (moving) rod instead of / next to the puzzle |
-| `--lag`, `--noise`, `--camera-width/height/fov` | the overhead camera |
-| `--speedup`, `--headless`, `--on-contact`, `--contact-margin` | as the `CRS97(...)` options below |
-| `--export-calib PATH` | save the simulated camera's calibration (`K`, `dist`, `T_base_camera`, size) as `.npz` |
-
-Camera calibration is the one thing that differs between the two worlds, so
-the solution loads it from a file (`--calib`, `src/perception.py`): the
-simulator's from `--export-calib`, the real camera's from your own
-calibration in the same format. Use the same `--camera-*` options for
-exporting and running.
-
-`src/main.py`, `perception.py` and `planning.py` are a skeleton with TODOs.
-`tests/test_launch.py` runs `src/main.py` headless through the launcher
-and checks that nothing in `src/` imports `crs_sim`.
+`./sim.sh` (= `python -m crs_sim.launch`) builds the scene, provides a
+stand-in `ctu_crs` whose `CRS97` is the simulated robot in it, runs the
+script and prints a verdict at the end (contacts, how far down the wire the
+hoop got). Scene options go **before** the script, the script's own
+arguments after it; `./sim.sh --help` lists them (`--puzzle A..E|none`,
+`--seed` or `--x --y --yaw`, `--table-z`, `--rod ...`, `--lag`, `--noise`,
+`--camera-width/height/fov`, `--speedup`, `--headless`, `--on-contact`,
+`--contact-margin`).
 
 ## Usage
 
@@ -107,16 +105,16 @@ sols = [s for s in robot.ik(pose) if robot.in_limits(s)]
 
 Run them with `./start.sh examples/<name>.py`, all take `--help`.
 
-| Example | What it shows |
-| :--- | :--- |
-| `demo.py` | Reach a target pose with IK, draw frames |
+| Example                                                                      | What it shows                                                                                                                                                                                      |
+| :--------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `demo.py`                                                                    | Reach a target pose with IK, draw frames                                                                                                                                                           |
 | `puzzle_env.py [--puzzle C] [--seed 7] [--image f.png] [--trajectory q.txt]` | The puzzle task as an environment: any puzzle placed on the table, ground truth printed, camera frame saved, a joint trajectory replayed and judged (contacts, how far down the wire the hoop got) |
-| `puzzle_a.py` | Puzzle A in the workspace, the hoop moved down the wire and back through fixed joint configurations |
-| `hoop_on_rod.py [--lag 0.3] [--no-predict]` | Track a moving rod in the lagged overhead camera image and slide the hoop onto it |
-| `show_cad.py [files...]` | Show any STEP/STL/OBJ file in the workspace; without arguments all five puzzles |
-| `draw_circle.py` | Cartesian path following: trace a circle with IK, draw the trail |
-| `joint_sweep.py` | Joint limits table and each joint swept towards its limits |
-| `real_or_sim.py [--real]` | The same control code on the simulator or the real robot |
+| `puzzle_a.py`                                                                | Puzzle A in the workspace, the hoop moved down the wire and back through fixed joint configurations                                                                                                |
+| `hoop_on_rod.py [--lag 0.3] [--no-predict]`                                  | Track a moving rod in the lagged overhead camera image and slide the hoop onto it                                                                                                                  |
+| `show_cad.py [files...]`                                                     | Show any STEP/STL/OBJ file in the workspace; without arguments all five puzzles                                                                                                                    |
+| `draw_circle.py`                                                             | Cartesian path following: trace a circle with IK, draw the trail                                                                                                                                   |
+| `joint_sweep.py`                                                             | Joint limits table and each joint swept towards its limits                                                                                                                                         |
+| `real_or_sim.py [--real]`                                                    | The same control code on the simulator or the real robot                                                                                                                                           |
 
 ## Puzzles: a virtual replacement of the physical task
 
@@ -190,18 +188,18 @@ robot.viz.show_mesh("bracket", "bracket.stl", scale=0.001)       # STL in mm
 
 ## Fidelity to the real robot
 
-| | Real `ctu_crs.CRS97` | `crs_sim.CRS97` |
-| :--- | :--- | :--- |
-| `fk`, `ik`, `fk_flange_pos`, DH params | analytic DH model | identical code, identical results (IK solutions are shuffled too) |
-| `q_min`, `q_max`, `q_home` | from IRC limits | identical |
-| `move_to_q` | non-blocking, asserts `initialize()` was called and joint limits | same; the motion takes real time |
-| `get_q`, `in_motion`, `wait_for_motion_stop` | read from the controller | follow the simulated motion, `q` quantized to encoder (IRC) resolution |
-| `soft_home`, `hard_home`, `initialize(home=...)` | | same behavior, hard home moves the joints in the real `B → AC → DEF` order |
-| `set_speed(_relative)` | | changes the simulated joint speeds |
-| `set_acceleration(_relative)` | | stored only (a smooth quintic profile is used) |
-| `gripper.*` | | tracks the commanded position, not rendered |
-| `grab_image` | Basler camera | rendered image of the simulated overhead camera with a configurable lag (or `robot.camera_image` if you set it) |
-| `release`, `reset_motors`, `close` | | no-ops |
+|                                                  | Real `ctu_crs.CRS97`                                             | `crs_sim.CRS97`                                                                                                 |
+| :----------------------------------------------- | :--------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| `fk`, `ik`, `fk_flange_pos`, DH params           | analytic DH model                                                | identical code, identical results (IK solutions are shuffled too)                                               |
+| `q_min`, `q_max`, `q_home`                       | from IRC limits                                                  | identical                                                                                                       |
+| `move_to_q`                                      | non-blocking, asserts `initialize()` was called and joint limits | same; the motion takes real time                                                                                |
+| `get_q`, `in_motion`, `wait_for_motion_stop`     | read from the controller                                         | follow the simulated motion, `q` quantized to encoder (IRC) resolution                                          |
+| `soft_home`, `hard_home`, `initialize(home=...)` |                                                                  | same behavior, hard home moves the joints in the real `B → AC → DEF` order                                      |
+| `set_speed(_relative)`                           |                                                                  | changes the simulated joint speeds                                                                              |
+| `set_acceleration(_relative)`                    |                                                                  | stored only (a smooth quintic profile is used)                                                                  |
+| `gripper.*`                                      |                                                                  | tracks the commanded position, not rendered                                                                     |
+| `grab_image`                                     | Basler camera                                                    | rendered image of the simulated overhead camera with a configurable lag (or `robot.camera_image` if you set it) |
+| `release`, `reset_motors`, `close`               |                                                                  | no-ops                                                                                                          |
 
 The URDF agrees with the DH model to < 1 mm. The rendered `adapter` link equals
 the DH flange frame rotated by π about its y-axis.
@@ -210,17 +208,17 @@ the DH flange frame rotated by π about its y-axis.
 
 All of these are keyword arguments of `CRS97(...)`:
 
-| Option | Default | Meaning |
-| :--- | :--- | :--- |
-| `visualize` | `True` | `False` runs headless (no viewer, meshcat not needed; pinocchio is only imported once the camera renders) |
-| `open_browser` | `True` | open the MeshCat page automatically |
-| `speedup` | `1.0` | time scale of motions; `np.inf` makes them instantaneous |
-| `q0` | `q_home` | initial joint configuration |
-| `render_fps` | `30` | render rate during motions |
-| `camera` | `True` | overhead camera for `grab_image`: `True` = default, a `crs_sim.camera.Camera(...)` to configure it, `False` = none |
-| `on_contact` | `"warn"` | touching an added object: `"warn"` prints it and marks it in the viewer, `"raise"` also raises `ContactError`, `"ignore"` only records it in `robot.contacts` |
-| `contact_resolution` | `0.001` | largest motion of any robot point between two contact checks [m] |
-| `contact_margin` | `0.0` | report a contact already when closer than this [m] |
+| Option               | Default  | Meaning                                                                                                                                                       |
+| :------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `visualize`          | `True`   | `False` runs headless (no viewer, meshcat not needed; pinocchio is only imported once the camera renders)                                                     |
+| `open_browser`       | `True`   | open the MeshCat page automatically                                                                                                                           |
+| `speedup`            | `1.0`    | time scale of motions; `np.inf` makes them instantaneous                                                                                                      |
+| `q0`                 | `q_home` | initial joint configuration                                                                                                                                   |
+| `render_fps`         | `30`     | render rate during motions                                                                                                                                    |
+| `camera`             | `True`   | overhead camera for `grab_image`: `True` = default, a `crs_sim.camera.Camera(...)` to configure it, `False` = none                                            |
+| `on_contact`         | `"warn"` | touching an added object: `"warn"` prints it and marks it in the viewer, `"raise"` also raises `ContactError`, `"ignore"` only records it in `robot.contacts` |
+| `contact_resolution` | `0.001`  | largest motion of any robot point between two contact checks [m]                                                                                              |
+| `contact_margin`     | `0.0`    | report a contact already when closer than this [m]                                                                                                            |
 
 ## Camera and moving rod
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run real-robot code in the simulator: ./sim.sh [scene options] script.py [script args]
-# e.g. ./sim.sh --puzzle C --seed 7 src/main.py --calib src/calibration/sim.npz
+# e.g. ./sim.sh --puzzle C --seed 7 src/main.py
 # See ./sim.sh --help for the scene options.
 set -euo pipefail
 cd "$(dirname "$0")"
