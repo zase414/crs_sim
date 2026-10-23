@@ -8,9 +8,10 @@ def detect_aruco(img):
     detector = cv2.aruco.ArucoDetector(aruco_dictionary)
 
     corners, ids, rejected = detector.detectMarkers(gray)
-    cv2.aruco.drawDetectedMarkers(img, corners, ids)
-    smaller = cv2.resize(img, (1280, 720))
-    cv2.imshow("Aruco", smaller)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    #cv2.aruco.drawDetectedMarkers(img, corners, ids)
+    #smaller = cv2.resize(img, (1280, 720))
+    #cv2.imshow("Aruco", smaller)
+    #cv2.waitKey(0)
+    #cv2.destroyAllWindows()
+    print(corners)
 

@@ -7,6 +7,10 @@ def main():
     robot = CRS97()
     robot.initialize(home = False)
 
+    # chci udelat nejakou kalibraci kamery
+    q = robot.get_q()
+    robot.move_to_q()
+
     img = robot.grab_image()   
     T_aruco = detect_aruco(img)
 
