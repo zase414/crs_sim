@@ -18,7 +18,7 @@ def main():
   offset_pose[1, 3] = 0.3
   offset_pose[2, 3] = 0.3
 
-  move(offset_pose)
+  move(offset_pose, robot)
   print("Moving to q:", np.rad2deg(q).round())
   for i in range(10):
     robot.move_to_q(q + [0.05,0,0,0,0,0])
@@ -26,7 +26,7 @@ def main():
   robot.stop_robot()
   robot.close_connection()
 
-def move(offset_pose):
+def move(offset_pose, robot):
     qi = robot.get_q()
     curr_pose = robot.fk(qi)
 
