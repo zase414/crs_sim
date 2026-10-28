@@ -9,7 +9,7 @@ def main():
 
     # chci udelat nejakou kalibraci kamery
     q = robot.get_q()
-    robot.move_to_q()
+    robot.move_to_q(q + [0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
 
     img = robot.grab_image()   
     T_aruco = detect_aruco(img)
