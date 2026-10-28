@@ -31,7 +31,7 @@ def move(offset_pose, robot):
     curr_pose = robot.fk(qi)
 
     raget_pose = curr_pose @ offset_pose
-    qs = robot.ik(target_pose)
+    qs = robot.ik(raget_pose)
 
     q = min(qs, key=lambda q: np.linalg.norm(q-qi))
     robot.move_to_q(q)
