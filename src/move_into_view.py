@@ -4,6 +4,7 @@ from ctu_mitsubishi import Rv6s
 
 
 def main():
+  steps = 50
   robot = Rv6s()
   try:
     robot.initialize()
@@ -19,7 +20,8 @@ def main():
     offset_pose[:3, 3] = [-0.2, 0.0, 0.3]
 
     q = move(offset_pose, robot)
-    delta = np.array([(math.pi), 0, 0, 0, 0, 0])
+    #moves robot to starting position for hoop finding in view
+    delta = np.array([(np.deg2rad(-170)), 0, 0, 0, 0, 0])
     robot.move_to_q(q)
 
 
