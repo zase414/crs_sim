@@ -30,6 +30,7 @@ def find_hoop_homography(images, hoop_positions):
     return M
 
 robot = Rv6s() # Connect without a real robot for offline kinematics
+robot.initialize()
 
 robot.soft_home()
 q0 = robot.get_q()
