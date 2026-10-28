@@ -5,9 +5,6 @@ from ctu_mitsubishi import Rv6s
 def init():
   robot = Rv6s() # Connect without a real robot for offline kinematics
   robot.initialize()
-  go_to_starting()
-
-def go_to_starting():
   robot.soft_home()
   q0 = robot.get_q()
   pose = robot.fk(q0)
@@ -40,7 +37,6 @@ def move(offset_pose):
 
     q = min(qs, key=lambda q: np.linalg.norm(q-qi))
     robot.move_to_q(q)
-
 
 if __name__ == "__main__":
   init()
