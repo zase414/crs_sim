@@ -73,3 +73,42 @@ def find_cam_intrinsics(imgs):
     else:
         # ARRRR, no charucos detected
         return -1
+
+
+def find_aruco_homography(path, marker_world_corners):
+    # collect image files from a folder, or use the single file given
+    if os.path.isdir(path):
+        files = sorted(
+            f for ext in ("*.png", "*.jpg", "*.jpeg", "*.bmp")
+            for f in glob.glob(os.path.join(path, ext))
+        )
+    else:
+        files = [path]
+
+    img_pts, world_pts = [], []
+
+    for f in files:
+        img = cv2.imread(f)
+        if img is None:
+            continue
+
+        corners, ids = detect_aruco(img)
+        if ids is None:
+            continue
+
+        for marker_corners, marker_id in zip(corners, ids.flatten()):
+            if int(marker_id) not in marker_world_corners:
+                continue
+            img_pts.extend(marker_corners.reshape(4, 2))
+            world_pts.extend(np.asarray(marker_world_corners[int(marker_id)], dtype=np.float32))
+
+    if len(img_pts) < 4:
+        return None  # not enough correspondences
+
+    M, mask = cv2.findHomography(
+        np.array(img_pts, dtype=np.float32),
+        np.array(world_pts, dtype=np.float32),
+        cv2.RANSAC,
+        5.0,
+    )
+    return M
