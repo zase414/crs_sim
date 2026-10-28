@@ -65,6 +65,8 @@ for i in range(4):
     move(offset_pose)
     dir *=-1
 
+np.save("images_hoop.npy", images)
+np.save("effector_poses.npy", effector_poses)
 M = find_hoop_homography(images, effector_poses)
 print(M)
 
