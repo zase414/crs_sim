@@ -1,3 +1,6 @@
+import cv2
+import numpy as np
+
 def find_hoop_homography(images, hoop_positions):
     images = np.asarray(images)
     assert images.shape[0] == len(hoop_positions)
@@ -43,30 +46,38 @@ def detect_aruco(img):
     return corners, ids
 
 def find_cam_intrinsics(imgs):
-    squares_x, squares_y = 5, 7
+    squares_x, squares_y = 7, 5
     square_len = 0.035
     marker_len = 0.025
 
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     board = cv2.aruco.CharucoBoard((squares_x, squares_y), square_len, marker_len, dictionary)
+    charuco_detector = cv2.aruco.CharucoDetector(board)
 
-    all_charuco_corners = []
-    all_charuco_ids = []
+    all_object_points = []
+    all_image_points = []
 
     for img in imgs:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        corners, ids = detect_aruco(img)
 
-        ret, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(corners, ids, gray, board)  
+        #cv2.imshow("nig", gray)
+        #cv2.waitKey(0)
+        #cv2.destroyAllWindows()
+
+        charuco_corners, charuco_ids, marker_corners, marker_ids = charuco_detector.detectBoard(gray)
+
         if charuco_corners is not None and charuco_ids is not None and len(charuco_corners) >= 4:
-            all_charuco_corners.append(charuco_corners)
-            all_charuco_ids.append(charuco_ids)      
+            obj_points, img_points = board.matchImagePoints(charuco_corners, charuco_ids)
+            
+            if obj_points is not None and len(obj_points) >= 4:
+                all_object_points.append(obj_points)
+                all_image_points.append(img_points)
 
-    if len(all_charuco_corners) > 0:
-        image_size = imgs[0][::-1]
+    if len(all_object_points) > 0:
+        image_size = imgs[0].shape[:2][::-1]
 
-        ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.aruco.calibrateCameraCharuco(
-            all_charuco_corners, all_charuco_ids, board, image_size, None, None
+        ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
+            all_object_points, all_image_points, image_size, None, None
         )
 
         return camera_matrix
