@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from ctu_mitsubishi import Rv6s
 
 
@@ -18,10 +19,15 @@ def main():
     offset_pose[:3, 3] = [-0.2, 0.0, 0.3]
 
     q = move(offset_pose, robot)
+    delta = np.array([(math.pi), 0, 0, 0, 0, 0])
+    robot.move_to_q(q)
+
+
     print("Moving to q:", np.rad2deg(q).round())
 
-    delta = np.array([0.31, 0, 0, 0, 0, 0])
-    for _ in range(10):
+    steps = 50
+    delta = np.array([(2*math.pi)/steps, 0, 0, 0, 0, 0])
+    for _ in range(steps):
       q = q + delta
       robot.move_to_q(q)
 
