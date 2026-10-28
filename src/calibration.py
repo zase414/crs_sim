@@ -81,7 +81,7 @@ for i in range(5):
         effector_poses.append(robot.fk(robot.get_q())) # this is nigga
 
     offset_pose = np.eye(4)
-    offset_pose[1,3] = dir*0.05
+    offset_pose[0,3] = -0.05
 
     move(offset_pose)
     dir *=-1
