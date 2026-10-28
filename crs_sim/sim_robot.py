@@ -76,6 +76,10 @@ class SimRobot:
     #: through the hoop along this frame's z axis. The universal hoop sits on
     #: the same adapter stack on every robot (crs_sim.puzzles.HOOP_IN_FLANGE).
     hoop_in_flange = translation([-0.135, 0.0, 0.012])
+    #: False: a new motion command replaces the motion in progress (CRS97).
+    #: True: the controller finishes each commanded motion before it starts
+    #: the next one, commands sent while moving are queued (RV-6S).
+    queue_motions = False
 
     def __init__(
         self,
@@ -244,7 +248,7 @@ class SimRobot:
     # Simulation internals
     # ------------------------------------------------------------------
     def _current_q(self) -> np.ndarray:
-        return self._motion.q_at(time.monotonic())
+        return self.q_at(time.monotonic())
 
     def _quantize(self, q: ArrayLike) -> np.ndarray:
         """The configuration the controller really reaches when sent to q."""
@@ -254,7 +258,12 @@ class SimRobot:
         """Start a coordinated motion from the current configuration to q."""
         q_goal = self._quantize(q)
         now = time.monotonic()
-        q_start = self._motion.q_at(now)
+        if self.queue_motions:
+            # starts where and when the last commanded motion ends
+            q_start = self._motion.q_goal.copy()
+            now = max(now, self._motion.t_start + self._motion.duration)
+        else:
+            q_start = self._motion.q_at(now)
         duration = (_QUINTIC_PEAK
                     * np.max(np.abs(q_goal - q_start) / self._max_velocity)
                     / self.speedup)
@@ -314,12 +323,17 @@ class SimRobot:
         with self._contact_cond:
             now = time.monotonic()
             q = self._motion.q_at(now)
-            # check from the current configuration on
-            self._contact_queue.append(
-                _Motion(q, self._motion.q_goal, now,
-                        max(0.0, self._motion.t_start + self._motion.duration
-                            - now))
-                if not self._motion.finished(now) else _Motion(q, q, now, 0.0))
+            # check from the current configuration on, including the motions
+            # queued after the current one
+            pending = [m for m in self._motions if not m.finished(now)]
+            if pending and pending[0].t_start <= now:
+                first = pending.pop(0)
+                self._contact_queue.append(_Motion(
+                    q, first.q_goal, now,
+                    max(0.0, first.t_start + first.duration - now)))
+            else:
+                self._contact_queue.append(_Motion(q, q, now, 0.0))
+            self._contact_queue.extend(pending)
             self._contact_idle = False
         threading.Thread(target=self._contact_loop, daemon=True).start()
 

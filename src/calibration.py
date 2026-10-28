@@ -2,7 +2,7 @@ import numpy as np
 import time
 import cv2
 from ctu_mitsubishi import Rv6s
-from src.image_utils import find_hoop_homography
+from src.utils.image_utils import find_hoop_homography
 
 robot = Rv6s() # Connect without a real robot for offline kinematics
 robot.initialize()
@@ -29,6 +29,8 @@ qs = robot.ik(target_pose)
 q = min(qs, key=lambda q: np.linalg.norm(q - q0))
 print("Moving to q:", np.rad2deg(q).round())
 robot.move_to_q(q) # This would move the real robot
+robot.wait_for_motion_stop()
+
 
 #moving along xy
 def move(offset_pose):
@@ -40,6 +42,8 @@ def move(offset_pose):
 
     q = min(qs, key=lambda q: np.linalg.norm(q-qi))
     robot.move_to_q(q)
+    robot.wait_for_motion_stop()
+
 
 images = []
 effector_poses = []

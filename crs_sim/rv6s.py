@@ -80,6 +80,8 @@ class Rv6s(SimRobot):
         self.dh_alpha = np.deg2rad([-90, 0, -90, 90, -90, 0])
 
         self._last_q = None
+        # the controller program executes the commanded motions one by one
+        self.queue_motions = True
         self._max_velocity = np.deg2rad(_MAX_SPEED_DEG)
         sim_kwargs.setdefault("urdf_path", URDF_PATH_RV6S)
         super().__init__(**sim_kwargs)
@@ -93,10 +95,9 @@ class Rv6s(SimRobot):
             self.stop_robot()
 
     def stop_robot(self):
-        """Stop the robot and perform a safe shutdown."""
-        if self._initialized:
-            self._start_motion(self._current_q())
-            self._initialized = False
+        """Stop the robot program. As on the real robot, the motions
+        already sent are still executed."""
+        self._initialized = False
 
     def initialize(self):
         """Performs robot initialization (the robot does not move)."""

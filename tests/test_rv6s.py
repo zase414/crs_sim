@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pytest
 
@@ -97,3 +99,20 @@ def test_gripper():
     g.close()
     assert g.state == "closed"
     g.disconnect()
+
+
+def test_commands_are_queued_like_the_real_controller():
+    r = Rv6s(visualize=False, camera=False, speedup=20.0)
+    r.initialize()
+    steps = [r.q_home + [0.05 * (k + 1), 0, 0, 0, 0, 0] for k in range(10)]
+    for q in steps:
+        r.move_to_q(q)              # no waiting in between
+    r.stop_robot()                  # does not stop the motions already sent
+    t_end = r._motion.t_start + r._motion.duration
+    # every step is executed, one after the other
+    times = [m.t_start for m in list(r._motions)[-10:]]
+    assert all(b > a for a, b in zip(times, times[1:]))
+    assert not np.allclose(r.q_at(time.monotonic()), steps[-1])
+    r.settle()
+    assert time.monotonic() >= t_end
+    assert np.allclose(r.q_at(time.monotonic()), steps[-1])

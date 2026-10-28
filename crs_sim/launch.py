@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import runpy
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -132,7 +133,13 @@ class Scene:
         if robot is None:
             return ("The script never created a robot "
                     "(ctu_crs.CRS97 or ctu_mitsubishi.Rv6s).")
-        # the contact check may still be catching up with the last motion
+        # the robot may still be executing the commanded motions (the RV-6S
+        # keeps moving after the script ends) and the contact check may
+        # still be catching up with them
+        end = robot._motion.t_start + robot._motion.duration
+        if end > time.monotonic():
+            print(f"[crs_sim] the robot is still moving, waiting "
+                  f"{end - time.monotonic():.1f} s for it to stop")
         robot.settle()
         lines = ["Scene: " + self.describe().replace("\n", ", ")]
         lines += [f"  {event}" for event in robot.contacts]
