@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from ctu_mitsubishi import Rv6s
 
-def init():
+def main():
   robot = Rv6s() # Connect without a real robot for offline kinematics
   robot.initialize()
   robot.soft_home()
@@ -19,8 +19,6 @@ def init():
   offset_pose[2, 3] = 0.3
 
   move(offset_pose)
-
-def main():
   print("Moving to q:", np.rad2deg(q).round())
   for i in range(10):
     robot.move_to_q(q + [0.05,0,0,0,0,0])
@@ -39,5 +37,4 @@ def move(offset_pose):
     robot.move_to_q(q)
 
 if __name__ == "__main__":
-  init()
   main()
