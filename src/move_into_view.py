@@ -52,4 +52,4 @@ def move(offset_pose, robot):
 
 
 if __name__ == "__main__":
-    main()
+  main()
