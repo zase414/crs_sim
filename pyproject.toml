@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "crs-sim"
 version = "0.1.0"
-description = "Standalone MeshCat simulator of the CRS97 arm with the ctu_crs interface"
+description = "Standalone MeshCat simulator of the CRS97 and Mitsubishi RV-6S arms with the ctu_crs / ctu_mitsubishi interfaces"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

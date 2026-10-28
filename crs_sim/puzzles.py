@@ -27,8 +27,9 @@ import numpy as np
 
 from .transforms import densify, pose, rx, rz, translation
 
-#: Hoop center in the flange frame returned by ``CRS97.fk``. The wire passes
-#: through the hoop along this frame's z axis.
+#: Hoop center in the flange frame returned by ``CRS97.fk`` (and
+#: ``Rv6s.fk``, the same adapter stack, see ``robot.hoop_in_flange``). The
+#: wire passes through the hoop along this frame's z axis.
 HOOP_IN_FLANGE = translation([-0.135, 0.0, 0.012])
 #: Inner radius of the hoop opening [m]
 HOOP_INNER_RADIUS = 0.03

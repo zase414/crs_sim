@@ -1,0 +1,139 @@
+<?xml version="1.0"?>
+<!-- Mitsubishi RV-6S, generated from the DH parameters of ctu_mitsubishi.Rv6s:
+     link_i is the DH frame i-1 rotated by joint i, the flange frame is
+     Rv6s.fk(q). The link shapes are boxes / cylinders approximating the
+     real arm, the adapter and the hoop are the CAD models. -->
+<robot name="RV6S">
+    <link name="base_link">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><mesh filename="meshes/rv6s_base_link.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="base_link_color"><color rgba="0.95 0.95 0.93 1"/></material>
+        </visual>
+    </link>
+    <joint name="joint1" type="revolute">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <parent link="base_link"/>
+        <child link="link_1"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="100" velocity="10" lower="-2.967060" upper="2.967060"/>
+    </joint>
+    <link name="link_1">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><mesh filename="meshes/rv6s_link_1.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="link_1_color"><color rgba="0.92 0.92 0.9 1"/></material>
+        </visual>
+    </link>
+    <joint name="joint2" type="revolute">
+        <origin xyz="0.085 0 0.35" rpy="-0.785398163397 -1.57079632679 -0.785398163397"/>
+        <parent link="link_1"/>
+        <child link="link_2"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="100" velocity="10" lower="-1.605703" upper="2.356194"/>
+    </joint>
+    <link name="link_2">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><mesh filename="meshes/rv6s_link_2.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="link_2_color"><color rgba="0.92 0.92 0.9 1"/></material>
+        </visual>
+    </link>
+    <joint name="joint3" type="revolute">
+        <origin xyz="0.28 0 0" rpy="0 0 -1.57079632679"/>
+        <parent link="link_2"/>
+        <child link="link_3"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="100" velocity="10" lower="-1.867502" upper="2.897247"/>
+    </joint>
+    <link name="link_3">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><mesh filename="meshes/rv6s_link_3.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="link_3_color"><color rgba="0.92 0.92 0.9 1"/></material>
+        </visual>
+    </link>
+    <joint name="joint4" type="revolute">
+        <origin xyz="0.1 0 0" rpy="-1.57079632679 0 0"/>
+        <parent link="link_3"/>
+        <child link="link_4"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="100" velocity="10" lower="-2.792527" upper="2.792527"/>
+    </joint>
+    <link name="link_4">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><mesh filename="meshes/rv6s_link_4.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="link_4_color"><color rgba="0.92 0.92 0.9 1"/></material>
+        </visual>
+    </link>
+    <joint name="joint5" type="revolute">
+        <origin xyz="0 0 0.315" rpy="1.57079632679 0 0"/>
+        <parent link="link_4"/>
+        <child link="link_5"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="100" velocity="10" lower="-2.094395" upper="2.094395"/>
+    </joint>
+    <link name="link_5">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><mesh filename="meshes/rv6s_link_5.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="link_5_color"><color rgba="0.92 0.92 0.9 1"/></material>
+        </visual>
+    </link>
+    <joint name="joint6" type="revolute">
+        <origin xyz="0 0 0" rpy="1.57079632679 0 3.14159265359"/>
+        <parent link="link_5"/>
+        <child link="link_6"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="100" velocity="10" lower="-6.283185" upper="6.283185"/>
+    </joint>
+    <link name="link_6">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><mesh filename="meshes/rv6s_link_6.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="link_6_color"><color rgba="0.3 0.3 0.3 1"/></material>
+        </visual>
+    </link>
+    <joint name="joint_flange" type="fixed">
+        <origin xyz="0 0 0.085" rpy="0 0 0"/>
+        <parent link="link_6"/>
+        <child link="flange"/>
+    </joint>
+    <link name="flange">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+    </link>
+    <joint name="joint_adapter" type="fixed">
+        <origin xyz="0 0 0" rpy="3.14159265359 0 3.14159265359"/>
+        <parent link="flange"/>
+        <child link="adapter"/>
+    </joint>
+    <link name="adapter">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 1.5707963268"/>
+            <geometry><mesh filename="meshes/mitsubishi_adapter.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="adapter_color"><color rgba="0.14 0.55 0.68 0.8"/></material>
+        </visual>
+    </link>
+    <joint name="joint_hoop" type="fixed">
+        <origin xyz="0 0 -0.008" rpy="0 0 0"/>
+        <parent link="adapter"/>
+        <child link="hoop"/>
+    </joint>
+    <link name="hoop">
+        <inertial><mass value="1"/><inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0"/></inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 1.5707963268"/>
+            <geometry><mesh filename="meshes/hoop.stl" scale="0.001 0.001 0.001"/></geometry>
+            <material name="hoop_color"><color rgba="0.14 0.55 0.68 0.8"/></material>
+        </visual>
+    </link>
+</robot>

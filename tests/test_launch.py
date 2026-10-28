@@ -38,6 +38,33 @@ sys.exit(3)
 '''
 
 
+# The same descent with the Mitsubishi RV-6S: its hoop goes through the same
+# poses (both robot bases are at the origin)
+SCRIPT_RV6S = '''
+import sys
+import numpy as np
+from ctu_mitsubishi import Rv6s
+
+DESCENT = np.array([
+    [0.200, 0.068, 2.586, 0.000, 0.488, 0.724],
+    [0.200, 0.249, 2.603, 0.000, 0.289, 0.724],
+    [0.200, 0.457, 2.583, 0.000, 0.101, 0.724],
+    [0.200, 0.675, 2.530, 0.000, -0.063, 0.724],
+])
+robot = Rv6s()
+robot.initialize()
+for q in DESCENT:
+    robot.move_to_q(q)
+    assert robot.wait_for_motion_stop()
+if "--bump" in sys.argv:
+    robot.move_to_q(DESCENT[-1] + [0.08, 0, 0, 0, 0, 0])
+    robot.wait_for_motion_stop()
+print("image", robot.grab_image().shape)
+robot.stop_robot()
+robot.close_connection()
+'''
+
+
 def launch(*args, cwd=ROOT):
     return subprocess.run([sys.executable, "-m", "crs_sim.launch", *map(str, args)],
                           capture_output=True, text=True, cwd=cwd, timeout=300)
@@ -66,6 +93,30 @@ def test_real_robot_script_runs_in_scene(tmp_path, puzzle_files, bump):
     assert "puzzle A at x=0.450" in out
     assert f"{int(bump)} contact(s)" in out
     assert "hoop threaded down to" in out
+
+
+@pytest.mark.parametrize("bump", [False, True])
+def test_mitsubishi_script_runs_in_scene(tmp_path, puzzle_files, bump):
+    script = tmp_path / "solution.py"
+    script.write_text(SCRIPT_RV6S)
+    result = launch("--headless", "--speedup", "inf", "--puzzle", "A",
+                    "--x", 0.45, "--table-z", 0.026, script,
+                    *(["--bump"] if bump else []))
+    out = result.stdout
+    assert result.returncode == 0, result.stderr
+    assert "image (2050, 2448, 3)" in out
+    assert "robot Rv6s" in out
+    assert f"{int(bump)} contact(s)" in out
+    assert "hoop threaded down to" in out
+
+
+def test_one_robot_per_scene(tmp_path):
+    script = tmp_path / "two.py"
+    script.write_text("from ctu_crs import CRS97\nfrom ctu_mitsubishi import Rv6s\n"
+                      "CRS97()\nRv6s()\n")
+    result = launch("--headless", "--puzzle", "none", script)
+    assert result.returncode != 0
+    assert "cannot also create a Rv6s" in result.stderr
 
 
 def test_script_errors_still_give_verdict(tmp_path):

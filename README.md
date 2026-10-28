@@ -16,6 +16,8 @@ python src/main.py
 
 Options for the simulated scene go before `src/main.py`, for example `./sim.sh --puzzle C --seed 7 src/main.py`. `./sim.sh --help` lists them all.
 
+On the Mitsubishi, write `from ctu_mitsubishi import Rv6s` / `robot = Rv6s()` instead, and run it exactly the same way: the simulator gives you the robot your script creates (see [Mitsubishi RV-6S](#mitsubishi-rv-6s)).
+
 # ...
 
 # ...
@@ -74,8 +76,9 @@ python src/main.py                         # connected to the real robot (ctu_cr
 ./sim.sh --puzzle C --seed 7 src/main.py   # other puzzle / random placement
 ```
 
-`./sim.sh` (= `python -m crs_sim.launch`) builds the scene, provides a
-stand-in `ctu_crs` whose `CRS97` is the simulated robot in it, runs the
+`./sim.sh` (= `python -m crs_sim.launch`) builds the scene, provides
+stand-ins for `ctu_crs` and `ctu_mitsubishi` whose `CRS97` / `Rv6s` is the
+simulated robot in it (whichever the script creates), runs the
 script and prints a verdict at the end (contacts, how far down the wire the
 hoop got). Scene options go **before** the script, the script's own
 arguments after it; `./sim.sh --help` lists them (`--puzzle A..E|none`,
@@ -204,6 +207,42 @@ robot.viz.show_mesh("bracket", "bracket.stl", scale=0.001)       # STL in mm
 The URDF agrees with the DH model to < 1 mm. The rendered `adapter` link equals
 the DH flange frame rotated by π about its y-axis.
 
+## Mitsubishi RV-6S
+
+`crs_sim.Rv6s` and `crs_sim.Rv6sGripper` stand in for
+[`ctu_mitsubishi`](https://pypi.org/project/ctu-mitsubishi/) 0.1.5:
+
+```python
+from ctu_mitsubishi import Rv6s   # real robot; under ./sim.sh this is the simulator
+robot = Rv6s()
+robot.initialize()                # does not move the robot
+robot.move_to_q(q)                # non-blocking
+robot.wait_for_motion_stop()      # -> True once stopped (False after timeout)
+robot.stop_robot()
+robot.close_connection()
+```
+
+| `ctu_mitsubishi.Rv6s`                                  | `crs_sim.Rv6s`                                                                                      |
+| :----------------------------------------------------- | :-------------------------------------------------------------------------------------------------- |
+| `fk`, `ik`, DH params, `q_min`, `q_max`, `q_home`      | identical code, identical results                                                                   |
+| `initialize`, `get_q`, `move_to_q`, `soft_home`        | same, `get_q` / `move_to_q` assert `initialize()` was called; the robot starts at `q_home`         |
+| `wait_for_motion_stop(timeout, poll_interval, tol)`    | waits for the simulated motion, returns whether it stopped within `timeout`                        |
+| motion speed                                           | rated joint speeds at the 25 % override `initialize()` sets (an estimate, not measured)             |
+| `grab_image`                                           | the simulated overhead camera, as for the CRS97                                                     |
+| `stop_robot`, `close_connection`                       | stop the motion / no-op                                                                             |
+| `Rv6sGripper.open/close/disconnect`                    | remembers the last command, not rendered                                                            |
+
+Only the methods of the real class exist (no `in_motion`, `set_speed`,
+`release`, ...), so code that runs in the simulator also runs on the robot.
+
+The links (`crs_sim/urdf/RV6S.urdf`) are boxes and cylinders built on the DH
+frames, sized like the real arm; the flange frame equals `fk`. The adapter is
+`robot_ee/mitsubishi_adapter.step` from ROB1-2025-hw. It is the CRS adapter
+stack in a 40 mm size, so the universal hoop sits at the same place:
+`robot.hoop_in_flange` equals `HOOP_IN_FLANGE` (135 mm along the flange −x,
+12 mm out). Which way the hoop points around the flange axis on the real
+robot is an assumption, check it on the robot.
+
 ## Simulator-only options
 
 All of these are keyword arguments of `CRS97(...)`:
@@ -292,4 +331,6 @@ robot.viz.viewer              # raw meshcat.Visualizer
 ## License
 
 The kinematics and robot parameters are taken from `ctu_crs` (BSD 3-Clause,
-Copyright (c) 2023, CTURobotics). See `LICENSE-ctu_crs`.
+Copyright (c) 2023, CTURobotics). See `LICENSE-ctu_crs`. The RV-6S kinematics
+are taken from `ctu_mitsubishi` (BSD 3-Clause, Copyright (c) 2023,
+CTURobotics). See `LICENSE-ctu_mitsubishi`.
