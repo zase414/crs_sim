@@ -2,7 +2,7 @@ import numpy as np
 import time
 import cv2
 from ctu_mitsubishi import Rv6s
-from image_utils import find_hoop_homography
+from src.image_utils import find_hoop_homography
 
 robot = Rv6s() # Connect without a real robot for offline kinematics
 robot.initialize()
