@@ -15,12 +15,12 @@ def main():
     print("Current pose:", pose.round(3))
 
     offset_pose = np.eye(4)
-    offset_pose[:3, 3] = [0.1, 0.3, 0.3]
+    offset_pose[:3, 3] = [-0.2, 0.0, 0.3]
 
     q = move(offset_pose, robot)
     print("Moving to q:", np.rad2deg(q).round())
 
-    delta = np.array([0.05, 0, 0, 0, 0, 0])
+    delta = np.array([0.31, 0, 0, 0, 0, 0])
     for _ in range(10):
       q = q + delta
       robot.move_to_q(q)
