@@ -25,7 +25,6 @@ def find_hoop_homography(images, hoop_positions):
     #print(hoops_2D)
 
     M, mask = cv2.findHomography(np.array(circle_centers), np.array(hoops_2D), cv2.RANSAC, 5.0)
-    print(M)
 
     return M
 
@@ -69,10 +68,10 @@ def move(offset_pose):
 images = []
 effector_poses = []
 dir = -1
-for i in range(3):
-    for j in range(3):
+for i in range(4):
+    for j in range(4):
         offset_pose = np.eye(4)
-        offset_pose[1,3] = dir*0.05
+        offset_pose[1,3] = dir*0.1
 
         move(offset_pose)
 
@@ -81,7 +80,7 @@ for i in range(3):
         effector_poses.append(robot.fk(robot.get_q())) # this is nigga
 
     offset_pose = np.eye(4)
-    offset_pose[0,3] = -0.05
+    offset_pose[0,3] = -0.1
 
     move(offset_pose)
     dir *=-1
