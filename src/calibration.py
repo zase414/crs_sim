@@ -69,8 +69,8 @@ def move(offset_pose):
 images = []
 effector_poses = []
 dir = -1
-for i in range(5):
-    for j in range(5):
+for i in range(3):
+    for j in range(3):
         offset_pose = np.eye(4)
         offset_pose[1,3] = dir*0.05
 
