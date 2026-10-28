@@ -27,8 +27,7 @@ def main():
 
     print("Moving to q:", np.rad2deg(q).round())
 
-    steps = 50
-    delta = np.array([(2*math.pi)/steps, 0, 0, 0, 0, 0])
+    delta = np.array([np.deg2rad(340/steps), 0, 0, 0, 0, 0])
     for _ in range(steps):
       q = q + delta
       robot.move_to_q(q)
