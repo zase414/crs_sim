@@ -8,6 +8,5 @@ def main():
     K = np.array(find_cam_intrinsics(images))
     np.save("/src/utils/cam_K.npy", K)
 
-
 if __name__ == "__main__":
     main()
