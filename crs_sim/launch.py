@@ -41,7 +41,6 @@ class Scene:
         self.args = args
         self.robot = None
         self.puzzle = None
-        self.rod = None
         #: lowest hoop center height above the plate top with the wire
         #: through the hoop [m], None if the hoop never got onto the wire
         self.lowest_threaded = None
@@ -49,8 +48,12 @@ class Scene:
     def camera(self) -> Camera:
         a = self.args
         fov = None if a.camera_fov is None else np.deg2rad(a.camera_fov)
-        return Camera(width=a.camera_width, height=a.camera_height,
-                      fov=fov, lag=a.lag, noise=a.noise)
+        camera = Camera(width=a.camera_width, height=a.camera_height,
+                        fov=fov, lag=a.lag, noise=a.noise)
+        if not (a.headless or a.no_camera_window):
+            from .camera_window import CameraWindow
+            camera.on_grab.append(CameraWindow(width=a.camera_window_width).show)
+        return camera
 
     def create_robot(self, tty_dev="/dev/mars", baudrate=19200, **kwargs):
         """Stand-in for ctu_crs.CRS97: the simulated robot in the scene.
@@ -80,8 +83,6 @@ class Scene:
                                color=0x8b6b4a)
         if a.puzzle != "none":
             self._add_puzzle(robot)
-        if a.rod != "none":
-            self._add_rod(robot)
         return robot
 
     def _add_puzzle(self, robot) -> None:
@@ -92,41 +93,33 @@ class Scene:
             maze_pose = random_pose(a.seed, table_z=a.table_z)
         else:
             maze_pose = pose([a.x, a.y, a.table_z + BASE_PLATE_THICKNESS], a.yaw)
-        self.puzzle = Puzzle(a.puzzle, maze_pose)
+        self.puzzle = Puzzle(a.puzzle, maze_pose,
+                             rotation_period=a.rotation_period,
+                             rotation_center=a.rotation_center)
         robot.add_object(self.puzzle)
-        to_maze = np.linalg.inv(maze_pose)
 
         def track_depth(q, t):
             hoop = robot.fk(q) @ robot.hoop_in_flange
-            if self.puzzle.wire_through_hoop(hoop):
-                h = (to_maze @ hoop)[2, 3]
+            if self.puzzle.wire_through_hoop(hoop, t):
+                h = (np.linalg.inv(self.puzzle.pose_at(t)) @ hoop)[2, 3]
                 if self.lowest_threaded is None or h < self.lowest_threaded:
                     self.lowest_threaded = h
         robot.add_monitor(track_depth)
 
-    def _add_rod(self, robot) -> None:
-        from .rod import MovingRod, circular, oscillating, static
-
-        a = self.args
-        center = translation([a.rod_x, a.rod_y, a.table_z])
-        trajectory = {"static": lambda: static(center),
-                      "oscillating": lambda: oscillating(
-                          center, [0, a.rod_amplitude, 0], a.rod_period),
-                      "circular": lambda: circular(
-                          center, a.rod_amplitude, a.rod_period)}[a.rod]()
-        self.rod = MovingRod(trajectory)
-        robot.add_object(self.rod)
-
     def describe(self) -> str:
         lines = [f"robot {type(self.robot).__name__}"] if self.robot else []
         if self.puzzle is not None:
-            p = self.puzzle.pose
+            puzzle = self.puzzle
+            p = puzzle.pose_at(puzzle.t0)
             yaw = np.arctan2(p[1, 0], p[0, 0])
-            lines.append(f"puzzle {self.puzzle.name} at x={p[0, 3]:.3f} "
+            lines.append(f"puzzle {puzzle.name} at x={p[0, 3]:.3f} "
                          f"y={p[1, 3]:.3f} z={p[2, 3]:.4f} m, yaw={yaw:.3f} rad")
-        if self.rod is not None:
-            lines.append(f"rod: {self.args.rod} around "
-                         f"x={self.args.rod_x:.3f} y={self.args.rod_y:.3f} m")
+            if puzzle.rotating:
+                c = (p @ [*puzzle.rotation_center, 1])[:2]
+                period = puzzle.rotation_period
+                sense = "counter-clockwise" if period > 0 else "clockwise"
+                lines.append(f"rotating {sense} once per {abs(period):g} s "
+                             f"about x={c[0]:.3f} y={c[1]:.3f} m")
         return "\n".join(lines) or "empty scene"
 
     def verdict(self) -> str:
@@ -196,13 +189,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     scene.add_argument("--yaw", type=float, default=0.0, help="puzzle rotation [rad]")
     scene.add_argument("--table-z", type=float, default=0.0,
                        help="table top height in the robot base frame [m]")
-    scene.add_argument("--rod", default="none",
-                       choices=["none", "static", "oscillating", "circular"])
-    scene.add_argument("--rod-x", type=float, default=0.45, help="rod center [m]")
-    scene.add_argument("--rod-y", type=float, default=0.0, help="rod center [m]")
-    scene.add_argument("--rod-amplitude", type=float, default=0.08,
-                       help="oscillation amplitude / circle radius [m]")
-    scene.add_argument("--rod-period", type=float, default=10.0, help="[s]")
+    scene.add_argument("--rotation-period", type=float, default=None,
+                       help="the puzzle turns about a vertical axis once per "
+                            "this many seconds, negative = clockwise "
+                            "(default: standing still)")
+    scene.add_argument("--rotation-center", type=float, nargs=2,
+                       default=[0.0, 0.0], metavar=("DX", "DY"),
+                       help="point the rotation axis passes through, relative "
+                            "to the puzzle center in the puzzle frame [m]")
 
     cam = parser.add_argument_group("camera")
     cam.add_argument("--lag", type=float, default=0.1, help="input lag [s]")
@@ -212,6 +206,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     cam.add_argument("--camera-fov", type=float, default=None,
                      help="horizontal field of view [deg] of an ideal "
                           "pinhole, default: the real camera's calibration")
+    cam.add_argument("--no-camera-window", action="store_true",
+                     help="do not show the grabbed images in a window "
+                          "(not shown with --headless either)")
+    cam.add_argument("--camera-window-width", type=int, default=800,
+                     help="initial width of the camera window [px], the "
+                          "images are shown in full resolution scaled to it")
 
     sim = parser.add_argument_group("simulation")
     sim.add_argument("--speedup", type=float, default=1.0,

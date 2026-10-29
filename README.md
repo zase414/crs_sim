@@ -82,9 +82,17 @@ simulated robot in it (whichever the script creates), runs the
 script and prints a verdict at the end (contacts, how far down the wire the
 hoop got). Scene options go **before** the script, the script's own
 arguments after it; `./sim.sh --help` lists them (`--puzzle A..E|none`,
-`--seed` or `--x --y --yaw`, `--table-z`, `--rod ...`, `--lag`, `--noise`,
-`--camera-width/height/fov`, `--speedup`, `--headless`, `--on-contact`,
-`--contact-margin`).
+`--seed` or `--x --y --yaw`, `--table-z`, `--rotation-period`,
+`--rotation-center`, `--lag`, `--noise`, `--camera-width/height/fov`,
+`--no-camera-window`, `--camera-window-width`, `--speedup`, `--headless`,
+`--on-contact`, `--contact-margin`).
+
+Every image the script grabs is also shown in a camera window (an OpenCV
+window in its own process, so the script needs no `cv2.waitKey` and its own
+windows are unaffected). It shows the full-resolution images scaled to the
+window, which opens `--camera-window-width` (800) pixels wide: resize it, or
+zoom in with Ctrl + mouse wheel to see single pixels. `--no-camera-window` or
+`--headless` turn it off.
 
 ## Usage
 
@@ -113,7 +121,6 @@ Run them with `./start.sh examples/<name>.py`, all take `--help`.
 | `demo.py`                                                                    | Reach a target pose with IK, draw frames                                                                                                                                                           |
 | `puzzle_env.py [--puzzle C] [--seed 7] [--image f.png] [--trajectory q.txt]` | The puzzle task as an environment: any puzzle placed on the table, ground truth printed, camera frame saved, a joint trajectory replayed and judged (contacts, how far down the wire the hoop got) |
 | `puzzle_a.py`                                                                | Puzzle A in the workspace, the hoop moved down the wire and back through fixed joint configurations                                                                                                |
-| `hoop_on_rod.py [--lag 0.3] [--no-predict]`                                  | Track a moving rod in the lagged overhead camera image and slide the hoop onto it                                                                                                                  |
 | `show_cad.py [files...]`                                                     | Show any STEP/STL/OBJ file in the workspace; without arguments all five puzzles                                                                                                                    |
 | `draw_circle.py`                                                             | Cartesian path following: trace a circle with IK, draw the trail                                                                                                                                   |
 | `joint_sweep.py`                                                             | Joint limits table and each joint swept towards its limits                                                                                                                                         |
@@ -162,11 +169,26 @@ is complete afterwards, also with `speedup=np.inf`. With
 `on_contact="raise"`, the next `wait_for_motion_stop` / `move_to_q` raises
 `crs_sim.ContactError`. `contact_margin` counts near misses as contacts too;
 `robot.contact_checker.distance(q, links=["hoop"])` gives the clearance.
-The moving rod is checked the same way.
 
 `random_pose(seed, x=(0.35, 0.55), y=(-0.2, 0.2), yaw=(-pi, pi), table_z=0)`
 draws a placement; `puzzle.pose = ...` moves a puzzle, `robot.remove_object`
-removes it. `examples/puzzle_env.py --trajectory q.txt` replays a list of
+removes it.
+
+A puzzle can turn like on a turntable, about a vertical axis that does not
+have to pass through its center:
+
+```python
+puzzle = Puzzle("C", pose([0.45, 0.05, 0.005]), rotation_period=20.0,  # s per turn, < 0 clockwise
+                rotation_center=[0.06, 0.0])  # axis position in the maze frame [m]
+robot.add_object(puzzle)    # camera, viewer and contact checking all see it turn
+puzzle.pose_at(t)           # ground truth at time.monotonic() time t, puzzle.pose = now
+puzzle.marker_corners(t), puzzle.wire_through_hoop(hoop_pose, t)
+puzzle.restart()            # back to the initial pose
+```
+
+With the launcher: `./sim.sh --puzzle C --rotation-period 20 --rotation-center
+0.06 0 script.py`. Contacts are checked along the robot's motions, so a
+puzzle turning into a robot standing still is not reported. `examples/puzzle_env.py --trajectory q.txt` replays a list of
 joint configurations and prints a verdict.
 
 The CAD models come from [pilcsimo/ROB1-2025-hw](https://github.com/pilcsimo/ROB1-2025-hw)
@@ -259,7 +281,7 @@ All of these are keyword arguments of `CRS97(...)`:
 | `contact_resolution` | `0.001`  | largest motion of any robot point between two contact checks [m]                                                                                              |
 | `contact_margin`     | `0.0`    | report a contact already when closer than this [m]                                                                                                            |
 
-## Camera and moving rod
+## Camera
 
 `robot.camera` is a pinhole camera matching the real workcell camera: its
 intrinsics (`camera.DEFAULT_CAMERA_K`) and pose (`camera.DEFAULT_CAMERA_POSE`,
@@ -273,8 +295,6 @@ image, the way it looked `lag` seconds ago:
 import numpy as np
 from crs_sim import CRS97
 from crs_sim.camera import Camera, look_at, write_png
-from crs_sim.rod import MovingRod, oscillating
-from crs_sim.transforms import translation
 
 robot = CRS97()                       # or CRS97(camera=Camera(width=1280, height=960, lag=0.2))
 robot.camera.lag = 0.25               # input lag [s], change it any time
@@ -282,19 +302,18 @@ robot.camera.lag_jitter = 0.02        # random extra lag (std) [s]
 robot.camera.fps = 30                 # exposures happen every 1/fps
 robot.camera.noise = 2.0              # pixel noise (std) [intensity levels]
 
-rod = MovingRod(oscillating(translation([0.45, 0, 0]), [0, 0.08, 0], period=10.0),
-                radius=0.01, length=0.2)
-robot.add_object(rod)                 # rendered by the camera, animated in the viewer
-
 image = robot.grab_image()            # HxWx3 uint8, BGR (OpenCV order)
 t_exp = robot.camera.last_exposure_time   # time.monotonic() the image shows
-rod.pose(t_exp), rod.top()            # ground truth then / now
+puzzle.pose_at(t_exp)                 # ground truth of a (rotating) puzzle then
 robot.q_at(t_exp)                     # robot joints then (last 10 s are kept)
 
 K = robot.camera.K                    # intrinsics, robot.camera.pose = extrinsics (base frame)
 uv, depth = robot.camera.project(points_nx3)
 xyz = robot.camera.backproject(uv, z=0.2)  # pixels -> points on the plane z = 0.2
 write_png("frame.png", image)
+
+from crs_sim.camera_window import CameraWindow
+robot.camera.on_grab.append(CameraWindow().show)   # show the grabbed images (the launcher does this)
 ```
 
 How the lag works: a frame exposed at `t_exp` (a multiple of `1/fps`) is
@@ -302,16 +321,13 @@ delivered at `t_exp + lag`, and `grab_image` returns the newest delivered
 frame. Rendering takes ~0.1 s, so `grab_image` blocks about that long (like
 waiting for a frame) and picks the exposure so that the image is exactly `lag`
 old when it returns (plus up to one frame period); a lag shorter than the
-rendering time is not reachable. Lag, `fps` and the rod trajectory are in
+rendering time is not reachable. Lag, `fps` and the puzzle rotation are in
 wall-clock seconds, `speedup` only scales robot motions.
 
 The image is rendered by a small numpy point-splatting renderer (URDF meshes,
 headlight shading, z-buffer, no shadows): good for color segmentation,
 circle/ellipse fitting and back-projection, not photorealistic. The hoop is
-blue (inner radius 30 mm), the rod red by default. Rod trajectories in
-`crs_sim.rod`: `static`, `linear`, `oscillating`, `circular`, or any function
-`t -> 4x4 pose` (t = seconds since the rod was created, `rod.restart()` resets
-it). Any object with `surfaces_at(t)` returning `[(crs_sim.camera.Surface,
+blue (inner radius 30 mm). Any object with `surfaces_at(t)` returning `[(crs_sim.camera.Surface,
 pose_4x4), ...]` can be added to the camera too.
 
 ## Drawing into the scene
@@ -323,9 +339,9 @@ robot.viz.show_points("path", points_nx3, color=0xffa500, radius=0.005)
 robot.viz.show_frame("target", pose_4x4, scale=0.1)
 robot.viz.show_box("table", [1.8, 0.8, 0.02], pose_4x4, opacity=0.3)
 robot.viz.show_mesh("part", "part.step", pose_4x4)   # any CAD file, needs the step extra
-robot.viz.show_cylinder("rod", radius, length, pose_4x4)  # axis = pose z, from its origin up
+robot.viz.show_cylinder("post", radius, length, pose_4x4)  # axis = pose z, from its origin up
 robot.viz.show_lines("lines", segments_nx2x3)
-robot.viz.set_pose("rod", pose_4x4)                  # move an object already drawn
+robot.viz.set_pose("post", pose_4x4)                 # move an object already drawn
 robot.viz.set_camera([1.2, -1.4, 1.0])
 robot.viz.delete("path")      # or robot.viz.delete() for all helper objects
 robot.viz.viewer              # raw meshcat.Visualizer

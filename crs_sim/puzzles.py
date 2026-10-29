@@ -12,6 +12,10 @@ by :func:`download_puzzles`, they are not part of this package.
     puzzle = Puzzle("B", random_pose(seed))
     robot.add_object(puzzle)     # viewer + camera + contact checking
 
+A puzzle can turn on a turntable: ``Puzzle("B", pose, rotation_period=20,
+rotation_center=[0.05, 0])`` rotates it about the vertical (maze z) axis
+through a point that need not be the puzzle center.
+
 Frames: a maze frame has its origin where the wire stands on the base plate
 top (the plate center), z up. The base plate frame is the center of the
 plate's bottom face, ``BASE_PLATE_THICKNESS`` below. Paths are hoop-center
@@ -19,11 +23,14 @@ poses whose z axis is tangent to the wire.
 """
 from __future__ import annotations
 
+import threading
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from .transforms import densify, pose, rx, rz, translation
 
@@ -145,9 +152,19 @@ class Puzzle:
     as printed, so the markers can be detected in ``robot.grab_image()``
     (``cv2.aruco``, DICT_4X4_50, IDs 1 and 2, 40 mm).
 
+    The puzzle can rotate with a constant speed about the maze z axis (up)
+    shifted to ``rotation_center``. The camera, the viewer and the contact
+    checking all see it at the right time; the ground truth at time t is
+    ``puzzle.pose_at(t)``.
+
     :param name: "A" - "E"
     :param pose: 4x4 pose of the maze frame (wire origin on the base plate
-        top, z up) in the robot base frame
+        top, z up) in the robot base frame, at the start of the rotation
+    :param rotation_period: duration of one revolution [s], positive turns
+        counter-clockwise seen from above, negative clockwise; None or 0
+        for a puzzle standing still
+    :param rotation_center: [x, y] point the rotation axis passes through,
+        in the maze frame [m] (the wire origin by default)
     :param color: wire color
     :param base_color: base plate color
     :param marker_color: color of the raised marker cells
@@ -156,7 +173,9 @@ class Puzzle:
     def __init__(self, name: str, pose: np.ndarray, color: int = 0xffa500,
                  base_color: int = 0xf0f0f0, marker_color: int = 0x202020,
                  spacing: float = 0.0015,
-                 cache_dir: str | Path | None = None) -> None:
+                 cache_dir: str | Path | None = None,
+                 rotation_period: float | None = None,
+                 rotation_center: ArrayLike = (0.0, 0.0)) -> None:
         from .visualizer import load_mesh
 
         if name not in "ABCDE" or len(name) != 1:
@@ -166,6 +185,10 @@ class Puzzle:
                                                           marker_color)
         self.spacing = spacing
         self._pose = np.array(pose, dtype=float)
+        self.rotation_period = rotation_period or None
+        self.rotation_center = np.array([*rotation_center, 0.0][:3], dtype=float)
+        #: Start of the rotation (time.monotonic() clock)
+        self.t0 = time.monotonic()
         files = download_puzzles(cache_dir, names=[name, "base"])
         self.wire_mesh = load_mesh(files[name])
         base = load_mesh(files["base"])
@@ -183,46 +206,74 @@ class Puzzle:
 
     # -- placement ------------------------------------------------------
     @property
+    def rotating(self) -> bool:
+        return self.rotation_period is not None
+
+    def pose_at(self, t: float | None = None) -> np.ndarray:
+        """
+        4x4 pose of the maze frame in the robot base frame at time t.
+        :param t: time.monotonic() time, now if None
+        """
+        if not self.rotating:
+            return self._pose.copy()
+        t = time.monotonic() if t is None else t
+        angle = 2 * np.pi * (t - self.t0) / self.rotation_period
+        c = self.rotation_center
+        return self._pose @ translation(c) @ rz(angle) @ translation(-c)
+
+    @property
     def pose(self) -> np.ndarray:
-        """4x4 pose of the maze frame in the robot base frame."""
-        return self._pose.copy()
+        """4x4 pose of the maze frame in the robot base frame now. Setting
+        it places the puzzle there and restarts the rotation from it."""
+        return self.pose_at()
 
     @pose.setter
     def pose(self, pose: np.ndarray) -> None:
         self._pose = np.array(pose, dtype=float)
-        if self._viz is not None:
-            for part in ("wire", "base", "markers"):
-                self._viz.set_pose(f"{self._viz_name}/{part}",
-                                   self._part_pose(part))
+        self.t0 = time.monotonic()
+        self._update_viz()
+
+    def restart(self) -> None:
+        """Start the rotation again from the initial pose."""
+        self.t0 = time.monotonic()
+        self._update_viz()
+
+    def base_pose_at(self, t: float | None = None) -> np.ndarray:
+        """4x4 pose of the base plate frame (bottom face center) at time t."""
+        return self.pose_at(t) @ translation([0, 0, -BASE_PLATE_THICKNESS])
 
     @property
     def base_pose(self) -> np.ndarray:
-        """4x4 pose of the base plate frame (bottom face center)."""
-        return self._pose @ translation([0, 0, -BASE_PLATE_THICKNESS])
+        """4x4 pose of the base plate frame (bottom face center) now."""
+        return self.base_pose_at()
 
-    def _part_pose(self, part: str) -> np.ndarray:
-        return self._pose if part == "wire" else self.base_pose
+    def _part_pose(self, part: str, t: float | None = None) -> np.ndarray:
+        return self.pose_at(t) if part == "wire" else self.base_pose_at(t)
 
-    def marker_poses(self) -> dict[int, np.ndarray]:
+    def marker_poses(self, t: float | None = None) -> dict[int, np.ndarray]:
         """
         Ground truth marker poses: marker ID -> 4x4 pose of the marker center
         on its top face, axes as the maze frame (x right, y up in the marker
         image, z out of the plate).
+        :param t: time.monotonic() time, now if None
         """
-        return {i: self.base_pose @ translation([*xy, BASE_PLATE_THICKNESS
-                                                 + MARKER_HEIGHT])
+        base = self.base_pose_at(t)
+        return {i: base @ translation([*xy, BASE_PLATE_THICKNESS
+                                       + MARKER_HEIGHT])
                 for i, xy in MARKER_CENTERS.items()}
 
-    def marker_corners(self) -> dict[int, np.ndarray]:
+    def marker_corners(self, t: float | None = None) -> dict[int, np.ndarray]:
         """
         Ground truth marker corners: marker ID -> 4x3 points in the robot base
         frame, in the ``cv2.aruco`` order (top-left, top-right, bottom-right,
         bottom-left of the marker image).
+        :param t: time.monotonic() time, now if None
         """
         h = MARKER_SIZE / 2
         local = np.array([[-h, h, 0, 1], [h, h, 0, 1], [h, -h, 0, 1],
                           [-h, -h, 0, 1]])
-        return {i: (p @ local.T).T[:, :3] for i, p in self.marker_poses().items()}
+        return {i: (p @ local.T).T[:, :3]
+                for i, p in self.marker_poses(t).items()}
 
     # -- camera ---------------------------------------------------------
     def load(self) -> None:
@@ -244,7 +295,7 @@ class Puzzle:
 
     def surfaces_at(self, t: float):
         self.load()
-        return [(s, self._part_pose(part)) for part, s in self._surfaces]
+        return [(s, self._part_pose(part, t)) for part, s in self._surfaces]
 
     # -- contacts -------------------------------------------------------
     def collision_geometries_at(self, t: float):
@@ -258,14 +309,16 @@ class Puzzle:
                 ("base", mesh_geometry(self.base_mesh.vertices,
                                        self.base_mesh.faces)),
             ]
-        return [(f"puzzle_{self.name}/{part}", geom, self._part_pose(part))
+        return [(f"puzzle_{self.name}/{part}", geom, self._part_pose(part, t))
                 for part, geom in self._collision]
 
-    def wire_through_hoop(self, hoop_pose: np.ndarray) -> bool:
+    def wire_through_hoop(self, hoop_pose: np.ndarray,
+                          t: float | None = None) -> bool:
         """
         Whether the wire passes through the hoop opening, i.e. the hoop is
         threaded on the wire (touching it or not, see ``robot.contacts``).
         :param hoop_pose: 4x4 hoop center pose, ``robot.fk(q) @ HOOP_IN_FLANGE``
+        :param t: time.monotonic() time the puzzle is posed at, now if None
         """
         import coal
 
@@ -273,15 +326,20 @@ class Puzzle:
             self._opening = coal.Cylinder(HOOP_INNER_RADIUS, 0.001)
         wire = self.collision_geometries_at(0.0)[0][1]
         tf = [coal.Transform3s(p[:3, :3], p[:3, 3])
-              for p in (np.asarray(hoop_pose, dtype=float), self._pose)]
+              for p in (np.asarray(hoop_pose, dtype=float), self.pose_at(t))]
         return coal.collide(self._opening, tf[0], wire, tf[1],
                             coal.CollisionRequest(), coal.CollisionResult()) > 0
 
     # -- viewer ---------------------------------------------------------
-    def attach(self, viz, name: str | None = None) -> None:
-        """Draw the puzzle in the viewer (crs_sim.Visualizer)."""
+    def attach(self, viz, name: str | None = None, fps: float = 30.0) -> None:
+        """
+        Draw the puzzle in the viewer (crs_sim.Visualizer), a rotating one
+        keeps turning there.
+        :param fps: update rate of the rotation in the viewer
+        """
         import trimesh
 
+        first = self._viz is None
         self._viz, self._viz_name = viz, name or f"puzzle_{self.name}"
         plate, cells = self._base_faces
         verts = np.asarray(self.base_mesh.vertices)
@@ -293,6 +351,21 @@ class Puzzle:
         viz.show_mesh(f"{self._viz_name}/markers",
                       trimesh.Trimesh(verts, cells, process=False),
                       self.base_pose, color=self.marker_color)
+        if first and self.rotating:
+            threading.Thread(target=self._animate, args=(1.0 / fps,),
+                             daemon=True).start()
+
+    def _update_viz(self) -> None:
+        viz = self._viz
+        if viz is not None:
+            t = time.monotonic()
+            for part in ("wire", "base", "markers"):
+                viz.set_pose(f"{self._viz_name}/{part}", self._part_pose(part, t))
+
+    def _animate(self, period: float) -> None:
+        while self._viz is not None:
+            self._update_viz()
+            time.sleep(period)
 
     def detach(self) -> None:
         """Remove the puzzle from the viewer."""

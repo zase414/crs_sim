@@ -172,9 +172,9 @@ class SimRobot:
 
     def add_object(self, obj, name: str | None = None) -> None:
         """
-        Add an object (e.g. a crs_sim.puzzles.Puzzle or a
-        crs_sim.rod.MovingRod) to the scene: the camera renders it, the
-        viewer shows it and touching it is detected (see ``contacts``).
+        Add an object (e.g. a crs_sim.puzzles.Puzzle) to the scene: the
+        camera renders it, the viewer shows it and touching it is detected
+        (see ``contacts``).
         :param obj: object with ``surfaces_at(t)`` and optionally
             ``attach(viz, name)`` and ``collision_geometries_at(t)``
         :param name: name in the viewer, the object's default if None

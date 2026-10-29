@@ -1,6 +1,7 @@
 """
-Contact checking between the robot and objects in the scene (puzzles, the
-moving rod), so that touching the wire is detected like the referee would.
+Contact checking between the robot and objects in the scene (the puzzles,
+also rotating ones), so that touching the wire is detected like the referee
+would.
 
 The robot is checked with its exact URDF visual meshes (the hoop included,
 the URDF collision boxes are far too coarse), objects with their CAD meshes.
@@ -68,8 +69,7 @@ class ContactChecker:
     Robot vs. objects collision checker.
 
     Objects provide ``collision_geometries_at(t)`` returning
-    ``[(name, coal geometry, 4x4 pose), ...]`` (see :class:`crs_sim.puzzles.Puzzle`,
-    :class:`crs_sim.rod.MovingRod`).
+    ``[(name, coal geometry, 4x4 pose), ...]`` (see :class:`crs_sim.puzzles.Puzzle`).
     :param urdf_path: robot URDF, its visual meshes are used
     :param margin: report contacts already when closer than this [m]
     """

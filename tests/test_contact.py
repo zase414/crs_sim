@@ -8,7 +8,6 @@ from crs_sim import CRS97
 from crs_sim.camera import Camera
 from crs_sim.contact import ContactError
 from crs_sim.puzzles import HOOP_IN_FLANGE, MARKER_SIZE
-from crs_sim.rod import MovingRod
 from crs_sim.transforms import pose, translation
 
 # Puzzle A at MAZE_POSE, the hoop moved from 10 cm above the wire tip down to
@@ -31,10 +30,22 @@ def make_robot(**kwargs):
     return r
 
 
-def rod_through_hoop(robot, q):
-    """Static rod thicker than the hoop opening, at the hoop center at q."""
+class Obstacle:
+    """Static vertical cylinder, centered on its pose."""
+    def __init__(self, pose, radius, length):
+        import coal
+
+        self.pose = pose
+        self.geometry = coal.Cylinder(radius, length)
+
+    def collision_geometries_at(self, t):
+        return [("obstacle", self.geometry, self.pose)]
+
+
+def obstacle_through_hoop(robot, q):
+    """Static cylinder thicker than the hoop opening, at the hoop center at q."""
     center = (robot.fk(q) @ HOOP_IN_FLANGE)[:3, 3]
-    return MovingRod(translation(center - [0, 0, 0.05]), radius=0.05, length=0.1)
+    return Obstacle(translation(center), radius=0.05, length=0.1)
 
 
 @pytest.fixture(scope="module")
@@ -47,16 +58,16 @@ def puzzle_a():
         pytest.skip(f"puzzle models not available: {e}")
 
 
-def test_rod_contact_detected():
+def test_obstacle_contact_detected():
     robot = make_robot(on_contact="ignore")
-    robot.add_object(rod_through_hoop(robot, Q_GOAL))
+    robot.add_object(obstacle_through_hoop(robot, Q_GOAL))
     assert robot.contacts == []
     robot.move_to_q(Q_GOAL)
     robot.wait_for_motion_stop()
     assert len(robot.contacts) == 1
     event = robot.contacts[0]
     assert "hoop" in [c.link for c in event.contacts]
-    assert event.contacts[0].obstacle == "rod"
+    assert event.contacts[0].obstacle == "obstacle"
     assert robot.in_contact()
     robot.clear_contacts()
     assert robot.contacts == []
@@ -68,26 +79,26 @@ def test_contact_before_add_is_not_checked():
     robot.wait_for_motion_stop()
     robot.move_to_q(robot.q_home)
     robot.wait_for_motion_stop()
-    robot.add_object(rod_through_hoop(robot, Q_GOAL))
+    robot.add_object(obstacle_through_hoop(robot, Q_GOAL))
     assert robot.contacts == []
 
 
 def test_interrupted_motion_is_checked_only_up_to_where_it_got():
     robot = make_robot(on_contact="ignore")
     robot.speedup = 1.0
-    robot.add_object(rod_through_hoop(robot, Q_GOAL))
+    robot.add_object(obstacle_through_hoop(robot, Q_GOAL))
     robot.move_to_q(Q_GOAL)
     duration = robot._motion.duration
     assert duration > 1.0
     time.sleep(0.2 * duration)
-    robot.move_to_q(robot.q_home)  # turn back long before reaching the rod
+    robot.move_to_q(robot.q_home)  # turn back long before reaching it
     robot.wait_for_motion_stop()
     assert robot.contacts == []
 
 
 def test_raise_on_contact():
     robot = make_robot(on_contact="raise")
-    robot.add_object(rod_through_hoop(robot, Q_GOAL))
+    robot.add_object(obstacle_through_hoop(robot, Q_GOAL))
     robot.move_to_q(Q_GOAL)
     with pytest.raises(ContactError) as e:
         robot.wait_for_motion_stop()
@@ -151,3 +162,46 @@ def test_wire_through_hoop(puzzle_a):
     assert puzzle_a.wire_through_hoop(robot.fk(DESCENT[3]) @ HOOP_IN_FLANGE)
     assert not puzzle_a.wire_through_hoop(robot.fk(DESCENT[0]) @ HOOP_IN_FLANGE)
     assert not puzzle_a.wire_through_hoop(robot.fk(robot.q_home) @ HOOP_IN_FLANGE)
+
+
+def test_rotating_puzzle_pose():
+    pytest.importorskip("trimesh")
+    from crs_sim.puzzles import Puzzle
+
+    try:
+        puzzle = Puzzle("A", MAZE_POSE, rotation_period=8.0,
+                        rotation_center=[0.1, 0.0])
+    except urllib.error.URLError as e:
+        pytest.skip(f"puzzle models not available: {e}")
+    t0 = puzzle.t0
+    assert np.allclose(puzzle.pose_at(t0), MAZE_POSE)
+    # the axis stays put, the wire origin circles around it, counter-clockwise
+    axis = MAZE_POSE[:3, 3] + [0.1, 0, 0]
+    for t, xy in [(2.0, [0.1, -0.1]), (4.0, [0.2, 0.0]), (8.0, [0.0, 0.0])]:
+        p = puzzle.pose_at(t0 + t)
+        assert np.allclose(p[:3, 3] - MAZE_POSE[:3, 3], [*xy, 0], atol=1e-12)
+        assert np.allclose(p @ [0.1, 0, 0, 1], [*axis, 1])
+    yaw = np.arctan2(puzzle.pose_at(t0 + 2.0)[1, 0], puzzle.pose_at(t0 + 2.0)[0, 0])
+    assert yaw == pytest.approx(np.pi / 2)
+    # everything moves with it
+    t = t0 + 4.0
+    assert np.allclose(puzzle.collision_geometries_at(t)[0][2], puzzle.pose_at(t))
+    corners = puzzle.marker_corners(t)
+    assert np.allclose(corners[1].mean(axis=0)[:2] - puzzle.pose_at(t)[:2, 3],
+                       [0.0375, -0.0375])
+
+
+def test_rotating_puzzle_wire_through_hoop():
+    pytest.importorskip("trimesh")
+    from crs_sim.puzzles import Puzzle
+
+    try:
+        puzzle = Puzzle("A", MAZE_POSE, rotation_period=8.0,
+                        rotation_center=[0.1, 0.0])
+    except urllib.error.URLError as e:
+        pytest.skip(f"puzzle models not available: {e}")
+    robot = make_robot()
+    hoop = robot.fk(DESCENT[3]) @ HOOP_IN_FLANGE
+    assert puzzle.wire_through_hoop(hoop, puzzle.t0)
+    assert not puzzle.wire_through_hoop(hoop, puzzle.t0 + 4.0)
+    assert puzzle.wire_through_hoop(hoop, puzzle.t0 + 8.0)

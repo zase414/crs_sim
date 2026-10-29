@@ -1,6 +1,6 @@
 """
 Simulated overhead camera: renders the robot, the hoop and any added objects
-(e.g. a :class:`crs_sim.rod.MovingRod`) into an image, with a configurable
+(e.g. a :class:`crs_sim.puzzles.Puzzle`) into an image, with a configurable
 input lag.
 
 The image at grab time ``t`` shows the scene as it was at ``t - lag``
@@ -130,6 +130,9 @@ class Camera:
         self.objects: list = []
         #: Exposure time of the last grabbed frame (time.monotonic() clock)
         self.last_exposure_time: float | None = None
+        #: Called with every grabbed image and its exposure time, e.g.
+        #: ``crs_sim.camera_window.CameraWindow.show``
+        self.on_grab: list = []
         self._rng = np.random.default_rng(seed)
         self._render_estimate = 0.0
 
@@ -230,6 +233,8 @@ class Camera:
         if done < t_exp + lag:
             time.sleep(t_exp + lag - done)
         self.last_exposure_time = t_exp
+        for callback in self.on_grab:
+            callback(image, t_exp)
         return image
 
     def render(self, t: float | None = None) -> np.ndarray:
@@ -390,37 +395,6 @@ def sample_mesh(vertices: np.ndarray, faces: np.ndarray, spacing: float,
     _, first = np.unique(np.round(points / (spacing / 20)), axis=0,
                          return_index=True)
     points, normals = points[first], normals[first]
-    return Surface(points, normals,
-                   np.tile(np.asarray(color, float), (len(points), 1)), spacing)
-
-
-def cylinder_surface(radius: float, length: float, spacing: float,
-                     color: ArrayLike) -> Surface:
-    """
-    Points on a closed cylinder, axis along z from z = 0 to z = length.
-    :param color: RGB in 0..1
-    """
-    na = max(8, int(math.ceil(2 * math.pi * radius / spacing)))
-    nz = max(2, int(math.ceil(length / spacing)) + 1)
-    a = np.linspace(0, 2 * np.pi, na, endpoint=False)
-    aa, zz = np.meshgrid(a, np.linspace(0, length, nz))
-    side_n = np.column_stack([np.cos(aa.ravel()), np.sin(aa.ravel()),
-                              np.zeros(aa.size)])
-    side_p = side_n * radius
-    side_p[:, 2] = zz.ravel()
-
-    caps_p, caps_n = [], []
-    for r in np.arange(0, radius, spacing):
-        k = max(1, int(math.ceil(2 * math.pi * r / spacing)))
-        b = np.linspace(0, 2 * np.pi, k, endpoint=False)
-        ring = np.column_stack([r * np.cos(b), r * np.sin(b), np.zeros(k)])
-        for z, nz_ in ((0.0, -1.0), (length, 1.0)):
-            p = ring.copy()
-            p[:, 2] = z
-            caps_p.append(p)
-            caps_n.append(np.tile([0.0, 0.0, nz_], (k, 1)))
-    points = np.concatenate([side_p] + caps_p)
-    normals = np.concatenate([side_n] + caps_n)
     return Surface(points, normals,
                    np.tile(np.asarray(color, float), (len(points), 1)), spacing)
 

@@ -6,8 +6,6 @@ import pytest
 from crs_sim import CRS97
 from crs_sim.camera import Camera, look_at, write_png
 from crs_sim.puzzles import HOOP_IN_FLANGE
-from crs_sim.rod import MovingRod, linear, oscillating
-from crs_sim.transforms import translation
 
 Q_OVER_TABLE = np.array([0.200, -0.404, -2.008, 0.000, -0.729, 0.724])
 
@@ -120,21 +118,12 @@ def test_fps_quantizes_exposure():
     assert abs(t * 10 - round(t * 10)) < 1e-6
 
 
-def test_rod_is_rendered_and_moves(robot):
-    rod = MovingRod(linear(translation([0.45, -0.1, 0.0]), [0, 0.2, 0]))
-    robot.add_object(rod)
-    image = robot.camera.render(rod.t0)
-    b, g, r = (image[:, :, k].astype(int) for k in range(3))
-    v, u = np.nonzero((r > 150) & (g < 100) & (b < 100))
-    top_xy = robot.camera.backproject([u.mean(), v.mean()], rod.length)[0, :2]
-    assert np.allclose(top_xy, [0.45, -0.1], atol=0.005)
-    assert np.allclose(rod.top(rod.t0 + 1.0), [0.45, 0.1, rod.length])
-
-
-def test_oscillating_rod():
-    rod = MovingRod(oscillating(translation([0.4, 0, 0]), [0, 0.1, 0], 2.0))
-    assert np.allclose(rod.pose(rod.t0 + 0.5)[:3, 3], [0.4, 0.1, 0])
-    assert np.allclose(rod.pose(rod.t0 + 1.0)[:3, 3], [0.4, 0, 0], atol=1e-12)
+def test_on_grab_gets_every_image(robot):
+    grabbed = []
+    robot.camera.on_grab.append(lambda image, t: grabbed.append((image, t)))
+    image = robot.grab_image()
+    assert len(grabbed) == 1 and grabbed[0][0] is image
+    assert grabbed[0][1] == robot.camera.last_exposure_time
 
 
 def test_write_png(tmp_path):
