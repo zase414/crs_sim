@@ -19,7 +19,7 @@ print("Current pose:", pose.round(3))
 offset_pose = np.eye(4)
 offset_pose[0, 3] = 0.1
 offset_pose[1, 3] = 0.3
-offset_pose[2, 3] = 0.3
+offset_pose[2, 3] = 0.6
 
 
 target_pose = pose @ offset_pose
@@ -53,7 +53,7 @@ for i in range(4):
     effector_poses.append(robot.fk(robot.get_q())) # this is nigga
     for j in range(4):
         offset_pose = np.eye(4)
-        offset_pose[1,3] = dir*0.05
+        offset_pose[1,3] = dir*0.07
 
         move(offset_pose)
 
@@ -62,14 +62,17 @@ for i in range(4):
         effector_poses.append(robot.fk(robot.get_q())) # this is nigga
 
     offset_pose = np.eye(4)
-    offset_pose[0,3] = -0.05
+    offset_pose[0,3] = -0.07
 
     move(offset_pose)
     dir *=-1
 
-np.save("images_hoop.npy", images)
-np.save("effector_poses.npy", effector_poses)
+#np.save("images_hoop.npy", images)
+#np.save("effector_poses.npy", effector_poses)
 M = find_hoop_homography(images, effector_poses)
+
+# save homography
+np.save("utils/homography.npy", M)
 
 robot.move_to_q([np.pi*0.8, 0, 0, 0, 0, 0])
 img = robot.grab_image()
