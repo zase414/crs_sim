@@ -1,3 +1,7 @@
+# ==========
+# DEPRECATED
+# ==========
+
 import numpy as np
 import math
 from ctu_mitsubishi import Rv6s
