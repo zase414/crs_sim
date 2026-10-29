@@ -70,5 +70,10 @@ np.save("effector_poses.npy", effector_poses)
 M = find_hoop_homography(images, effector_poses)
 print(M)
 
+robot.move_to_q([np.pi*0.8, 0, 0, 0, 0, 0])
+img = robot.grab_image()
+pose = localize_base(img, M)
+print(pose)
+
 robot.stop_robot()
 robot.close_connection()

@@ -48,7 +48,7 @@ def detect_aruco(img):
     #cv2.imshow("Aruco", smaller)
     #cv2.waitKey(0)
     #cv2.destroyAllWindows()
-    print(corners)
+    #print(corners)
     return corners, ids
 
 def find_cam_intrinsics(imgs):
@@ -91,7 +91,6 @@ def find_cam_intrinsics(imgs):
         # ARRRR, no charucos detected
         return -1
 
-
 def find_aruco_homography(path, marker_world_corners):
     # collect image files from a folder, or use the single file given
     if os.path.isdir(path):
@@ -129,3 +128,22 @@ def find_aruco_homography(path, marker_world_corners):
         5.0,
     )
     return M
+
+def localize_base(image, find_cam_intrinsics, homography_M):
+    # Take the hoop points and transform them to image space with with M^-1
+    M_inv = np.linalg.inv(homography_M)
+
+    corners, ids = detect_aruco(image)
+
+    if len(corners != 8):
+        # No base found
+        return -1
+
+    aruco1_center = (corners[0][0] + corners[0][1] + corners[0][2] + corners[0][3]) / 4
+    aruco2_center = (corners[1][0] + corners[1][1] + corners[1][2] + corners[1][3]) / 4
+
+    center_of_base_cam = (aruco1_center + aruco2_center) / 2
+
+    base_center_robot = homography_M @ center_of_base_cam
+    return base_center_robot
+    
