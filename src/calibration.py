@@ -3,6 +3,8 @@ import time
 import cv2
 from ctu_mitsubishi import Rv6s
 from src.utils.image_utils import find_hoop_homography, localize_base
+from src.utils.movement import move_rel, move_abs
+
 
 robot = Rv6s() # Connect without a real robot for offline kinematics
 robot.initialize()
@@ -31,31 +33,6 @@ print("Moving to q:", np.rad2deg(q).round())
 robot.move_to_q(q) # This would move the real robot
 robot.wait_for_motion_stop()
 
-
-#moving along xy
-def move_rel(offset_pose):
-    qi = robot.get_q()
-    curr_pose = robot.fk(qi)
-
-    target_pose = curr_pose @ offset_pose
-
-    move_abs(target_pose)
-
-def move_abs(target_pose):
-    qi = robot.get_q()
-
-    # IK + only solutions within joint limits
-    qs = [q for q in robot.ik(target_pose) if robot.in_limits(q)]
-    if not qs:
-        print("Skipping move: unreachable, target", target_pose[:3, 3].round(3))
-        return False
-
-    q = min(qs, key=lambda q: np.linalg.norm(q - qi))
-
-    robot.move_to_q(q)
-    robot.wait_for_motion_stop()
-
-
 images = []
 effector_poses = []
 dir = -1
@@ -66,7 +43,7 @@ for i in range(4):
         offset_pose = np.eye(4)
         offset_pose[1,3] = dir*0.1
 
-        move_rel(offset_pose)
+        move_rel(robot, offset_pose)
 
         time.sleep(0.5)
         images.append(robot.grab_image())
@@ -75,7 +52,7 @@ for i in range(4):
     if i !=3:
         offset_pose = np.eye(4)
         offset_pose[0,3] = -0.1
-        move_rel(offset_pose)
+        move_rel(robot, offset_pose)
     dir *=-1
 
 
@@ -87,6 +64,8 @@ M = find_hoop_homography(images, effector_poses)
 np.save("homography.npy", M)
 
 robot.move_to_q([np.pi*0.8, 0, 0, 0, 0, 0])
+robot.wait_for_motion_stop()
+
 img = robot.grab_image()
 pose = localize_base(img, M)
 print(pose)
@@ -94,12 +73,9 @@ print(pose)
 final_pose = robot.fk(q0)
 final_pose[0, 3] = pose[0]
 final_pose[1, 3] = pose[1]
-final_pose[2, 3] = 0.345
+final_pose[2, 3] = 0.045
 
-print(final_pose)
-qs = robot.ik(final_pose)
-q = min(qs, key=lambda q: np.linalg.norm(q-q0))
-robot.move_to_q(q)
+move_abs(robot, final_pose)
 
 robot.stop_robot()
 robot.close_connection()
