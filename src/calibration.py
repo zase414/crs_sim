@@ -49,6 +49,8 @@ images = []
 effector_poses = []
 dir = -1
 for i in range(4):
+    images.append(robot.grab_image())
+    effector_poses.append(robot.fk(robot.get_q())) # this is nigga
     for j in range(4):
         offset_pose = np.eye(4)
         offset_pose[1,3] = dir*0.05
