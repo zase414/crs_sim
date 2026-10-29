@@ -141,11 +141,12 @@ def localize_base(image, homography_M):
 
     corners = np.array(corners)
 
+    # get center
     c_o_aruco_mass = np.mean(corners, axis = 2).squeeze()
-    print(c_o_aruco_mass)
+    #print(c_o_aruco_mass)
 
     center_of_base_cam = np.mean(c_o_aruco_mass, axis = 0).squeeze()
-    print(center_of_base_cam)
+    #print(center_of_base_cam)
     #cv2.circle(image, (int(center_of_base_cam[0]), int(center_of_base_cam[1])), 10, (255, 0, 0), -1)
     #smaller = cv2.resize(image, (1280, 720))
     #cv2.imshow("center of base", smaller)
@@ -157,5 +158,47 @@ def localize_base(image, homography_M):
     base_center_robot = homography_M @ homogen_center
     X_real = base_center_robot[0] / base_center_robot[2]
     Y_real = base_center_robot[1] / base_center_robot[2]
-    return [X_real, Y_real]
+
+    # get rotation
+    #c_o_aruco_mass_homogen = np.c_[c_o_aruco_mass, np.ones(c_o_aruco_mass.shape[0])]
+    #aruco_in_robot = homography_M @ c_o_aruco_mass_homogen.T
+    #aruco_v_diff = aruco_in_robot[np.where(ids == 1)] - aruco_in_robot[np.where(ids == 2)]
+    #ang = np.arctan2(aruco_v_diff[0, 0], aruco_v_diff[0, 1])# - np.pi/4
+    #norm_ang = np.arctan2(np.sin(ang), np.cos(ang))
+
+    tag = corners[0][0]
+    edges_px = np.array([
+    [tag[0][0], tag[0][1], 1.0],
+    [tag[1][0], tag[1][1], 1.0]
+    ])
+
+    print(edges_px)
+
+    robot_edges = homography_M @ edges_px.T
+    print(robot_edges)
+
+    robot_left_upper = robot_edges[:2,0] / robot_edges[2, 0]
+    robot_right_upper = robot_edges[:2,1] / robot_edges[2, 1]
+
+    dx = robot_left_upper[0] - robot_right_upper[0]
+    dy = robot_left_upper[1] - robot_right_upper[1]
+
+    ang = np.arctan2(dy, dx)
+    print(ang)
+
+    # Získání souřadnic rohů a přetypování na int pro kreslení
+    levy_horni_px = (int(tag[0][0]), int(tag[0][1]))
+    pravy_horni_px = (int(tag[1][0]), int(tag[1][1]))
+
+    cos_a = np.cos(ang)
+    sin_a = np.sin(ang)
+    transform = np.eye(4)
+    transform[0,3] = X_real
+    transform[1,3] = Y_real
+    transform[0,0] = cos_a
+    transform[0,1] = sin_a
+    transform[1,0] = -sin_a
+    transform[1,1] = cos_a
+
+    return transform
     

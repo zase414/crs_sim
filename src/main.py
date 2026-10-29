@@ -15,8 +15,11 @@ def main():
     H = np.load("src/utils/homography.npy")
 
     robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
+    robot.wait_for_motion_stop()
 
     img = robot.grab_image()   
+
+    detect_aruco(img)
 
     pos = localize_base(img, H)
     print(pos)
