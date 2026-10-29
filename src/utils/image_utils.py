@@ -129,21 +129,26 @@ def find_aruco_homography(path, marker_world_corners):
     )
     return M
 
-def localize_base(image, find_cam_intrinsics, homography_M):
+def localize_base(image, homography_M):
     # Take the hoop points and transform them to image space with with M^-1
     M_inv = np.linalg.inv(homography_M)
 
     corners, ids = detect_aruco(image)
 
-    if len(corners != 8):
+    if len(corners) != 2:
         # No base found
         return -1
 
-    aruco1_center = (corners[0][0] + corners[0][1] + corners[0][2] + corners[0][3]) / 4
-    aruco2_center = (corners[1][0] + corners[1][1] + corners[1][2] + corners[1][3]) / 4
+    corners = np.array(corners)
 
-    center_of_base_cam = (aruco1_center + aruco2_center) / 2
+    c_o_aruco_mass = np.mean(corners, axis = 2).squeeze()
+    print(c_o_aruco_mass)
 
-    base_center_robot = homography_M @ center_of_base_cam
+    center_of_base_cam = np.mean(c_o_aruco_mass, axis = 0).squeeze()
+    print(center_of_base_cam)
+
+    homogen_center = np.append(center_of_base_cam, 1)
+
+    base_center_robot = homography_M @ homogen_center
     return base_center_robot
     
