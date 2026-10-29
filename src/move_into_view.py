@@ -29,8 +29,8 @@ def main():
 
     delta = np.array([np.deg2rad(340/steps), 0, 0, 0, 0, 0])
     for _ in range(steps):
-      q = q + delta
-      robot.move_to_q(q)
+        q = q + delta
+        robot.move_to_q(q)
 
   finally:
     robot.stop_robot()
@@ -38,19 +38,19 @@ def main():
 
 
 def move(offset_pose, robot):
-  qi = robot.get_q()
-  curr_pose = robot.fk(qi)
+    qi = robot.get_q()
+    curr_pose = robot.fk(qi)
 
-  target_pose = curr_pose @ offset_pose
-  solutions = robot.ik(target_pose)
+    target_pose = curr_pose @ offset_pose
+    solutions = robot.ik(target_pose)
 
-  if not solutions:
-    raise RuntimeError("Inverse kinematics returned no solutions")
+    if not solutions:
+        raise RuntimeError("Inverse kinematics returned no solutions")
 
-  q = min(solutions, key=lambda candidate: np.linalg.norm(candidate - qi))
-  robot.move_to_q(q)
-  return q
+    q = min(solutions, key=lambda candidate: np.linalg.norm(candidate - qi))
+    robot.move_to_q(q)
+    return q
 
 
 if __name__ == "__main__":
-  main()
+    main()
