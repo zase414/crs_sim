@@ -84,8 +84,8 @@ hoop got). Scene options go **before** the script, the script's own
 arguments after it; `./sim.sh --help` lists them (`--puzzle A..E|none`,
 `--seed` or `--x --y --yaw`, `--table-z`, `--rotation-period`,
 `--rotation-center`, `--lag`, `--noise`, `--camera-width/height/fov`,
-`--no-camera-window`, `--camera-window-width`, `--speedup`, `--headless`,
-`--on-contact`, `--contact-margin`).
+`--camera-renderer`, `--no-camera-window`, `--camera-window-width`,
+`--speedup`, `--headless`, `--on-contact`, `--contact-margin`).
 
 Every image the script grabs is also shown in a camera window (an OpenCV
 window in its own process, so the script needs no `cv2.waitKey` and its own
@@ -318,17 +318,23 @@ robot.camera.on_grab.append(CameraWindow().show)   # show the grabbed images (th
 
 How the lag works: a frame exposed at `t_exp` (a multiple of `1/fps`) is
 delivered at `t_exp + lag`, and `grab_image` returns the newest delivered
-frame. Rendering takes ~0.1 s, so `grab_image` blocks about that long (like
+frame. Rendering takes ~0.05 s (OpenGL, full resolution), so `grab_image` blocks about that long (like
 waiting for a frame) and picks the exposure so that the image is exactly `lag`
 old when it returns (plus up to one frame period); a lag shorter than the
 rendering time is not reachable. Lag, `fps` and the puzzle rotation are in
 wall-clock seconds, `speedup` only scales robot motions.
 
-The image is rendered by a small numpy point-splatting renderer (URDF meshes,
-headlight shading, z-buffer, no shadows): good for color segmentation,
-circle/ellipse fitting and back-projection, not photorealistic. The hoop is
-blue (inner radius 30 mm). Any object with `surfaces_at(t)` returning `[(crs_sim.camera.Surface,
-pose_4x4), ...]` can be added to the camera too.
+The image is rendered with OpenGL (moderngl, headless through EGL, no window
+or browser needed): the URDF and puzzle meshes, headlight shading,
+anti-aliased edges, no shadows. It is good for color segmentation,
+circle/ellipse fitting and back-projection, not photorealistic. Where no
+OpenGL is available, the camera warns and falls back to a numpy
+point-splatting renderer (~0.35 s per frame, grainier edges);
+`Camera(renderer="gl" | "points")` or `--camera-renderer` picks one
+explicitly. The hoop is blue (inner radius 30 mm). Any object with
+`surfaces_at(t)` returning `[(crs_sim.camera.Surface, pose_4x4), ...]` can be
+added to the camera too (`Surface(triangles=..., color=...)` or
+`Surface(points, normals, colors, spacing)`).
 
 ## Drawing into the scene
 

@@ -19,10 +19,14 @@ def robot():
     return r
 
 
-def blue_centroid(image):
-    """Centroid of the hoop (blue) pixels of a BGR image."""
+def blue_centroid(image, near=None, radius=30):
+    """Centroid of the hoop (blue) pixels of a BGR image, only those within
+    radius of the pixel near if given."""
     b, r = image[:, :, 0].astype(int), image[:, :, 2].astype(int)
     v, u = np.nonzero((b > 100) & (b > r + 50))
+    if near is not None:
+        keep = np.hypot(u - near[0], v - near[1]) < radius
+        u, v = u[keep], v[keep]
     assert len(u) > 0
     return np.array([u.mean(), v.mean()])
 
@@ -56,7 +60,7 @@ def test_grab_image_shows_hoop(robot):
     hoop = (robot.fk(robot.get_q()) @ HOOP_IN_FLANGE)[:3, 3]
     uv, _ = robot.camera.project(hoop)
     # the centroid is pulled a bit towards the hoop's stem
-    assert np.linalg.norm(blue_centroid(image) - uv[0]) < 15
+    assert np.linalg.norm(blue_centroid(image, uv[0]) - uv[0]) < 5
 
 
 def test_camera_image_overrides_rendering(robot):
@@ -124,6 +128,25 @@ def test_on_grab_gets_every_image(robot):
     image = robot.grab_image()
     assert len(grabbed) == 1 and grabbed[0][0] is image
     assert grabbed[0][1] == robot.camera.last_exposure_time
+
+
+@pytest.mark.parametrize("renderer", ["gl", "points"])
+def test_renderers_agree(renderer):
+    if renderer == "gl":
+        pytest.importorskip("moderngl")
+        from crs_sim.gl_render import shared_renderer
+        try:
+            shared_renderer()
+        except Exception as e:
+            pytest.skip(f"no OpenGL: {e}")
+    r = CRS97(visualize=False, speedup=np.inf, camera=Camera(
+        width=400, height=300, noise=0.0, fps=None, lag=0.0, renderer=renderer))
+    r.initialize()
+    r.move_to_q(Q_OVER_TABLE)
+    image = r.camera.render()
+    hoop = (r.fk(r.get_q()) @ HOOP_IN_FLANGE)[:3, 3]
+    uv, _ = r.camera.project(hoop)
+    assert np.linalg.norm(blue_centroid(image, uv[0]) - uv[0]) < 5
 
 
 def test_write_png(tmp_path):

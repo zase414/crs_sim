@@ -49,7 +49,8 @@ class Scene:
         a = self.args
         fov = None if a.camera_fov is None else np.deg2rad(a.camera_fov)
         camera = Camera(width=a.camera_width, height=a.camera_height,
-                        fov=fov, lag=a.lag, noise=a.noise)
+                        fov=fov, lag=a.lag, noise=a.noise,
+                        renderer=a.camera_renderer)
         if not (a.headless or a.no_camera_window):
             from .camera_window import CameraWindow
             camera.on_grab.append(CameraWindow(width=a.camera_window_width).show)
@@ -206,6 +207,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     cam.add_argument("--camera-fov", type=float, default=None,
                      help="horizontal field of view [deg] of an ideal "
                           "pinhole, default: the real camera's calibration")
+    cam.add_argument("--camera-renderer", default="auto",
+                     choices=["auto", "gl", "points"],
+                     help="OpenGL (gl) or the numpy point renderer, auto = "
+                          "OpenGL if available")
     cam.add_argument("--no-camera-window", action="store_true",
                      help="do not show the grabbed images in a window "
                           "(not shown with --headless either)")

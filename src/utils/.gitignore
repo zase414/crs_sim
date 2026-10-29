@@ -1,3 +1,6 @@
-images
-photos
+/images
+/photos
 *.npy
+
+/effector_poses.npy
+/images_hoop.npy

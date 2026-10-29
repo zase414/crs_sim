@@ -9,11 +9,13 @@ real camera whose frames reach your code late. The robot and the objects keep
 a short history of their motion, so a lagged frame is rendered exactly as the
 scene was at its exposure time.
 
-Rendering is a small numpy point-splatting renderer: object surfaces are
-sampled into points (with normals and colors) once, then every frame the
-points are transformed, projected through a pinhole model, shaded (headlight
-Lambert) and z-buffered. It is meant for testing perception pipelines (color
-segmentation, circle/ellipse fitting, back-projection), not photorealism.
+Rendering is done with OpenGL (:mod:`crs_sim.gl_render`, headless EGL): the
+object meshes are projected through the pinhole K and shaded (headlight
+Lambert). Without OpenGL a small numpy point-splatting renderer is used:
+object surfaces are sampled into points (with normals and colors) once, then
+every frame the points are transformed, projected, shaded and z-buffered.
+Both are meant for testing perception pipelines (color segmentation,
+circle/ellipse fitting, back-projection), not photorealism.
 
 Frames: the camera frame follows the OpenCV convention (x right, y down,
 z along the optical axis), the camera pose is given in the robot base frame.
@@ -24,21 +26,59 @@ from __future__ import annotations
 import math
 import struct
 import time
+import warnings
 import zlib
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import ArrayLike
 
 
-@dataclass
 class Surface:
-    """Points sampled on an object surface, in the object frame."""
-    points: np.ndarray   # Nx3 [m]
-    normals: np.ndarray  # Nx3 unit
-    colors: np.ndarray   # Nx3 RGB in 0..1
-    spacing: float       # approximate distance between neighbouring points [m]
+    """
+    An object surface, in the object frame: a triangle mesh of one color
+    (drawn as is by the OpenGL renderer, sampled into points for the point
+    renderer on first use), or points.
+    :param points: Nx3 [m]
+    :param normals: Nx3 unit
+    :param colors: Nx3 RGB in 0..1
+    :param spacing: approximate distance between neighbouring points [m]
+    :param triangles: Tx3x3 triangle vertices [m], instead of the points
+    :param color: RGB in 0..1 of the triangles
+    """
+    def __init__(self, points: ArrayLike | None = None,
+                 normals: ArrayLike | None = None,
+                 colors: ArrayLike | None = None, spacing: float = 0.003,
+                 triangles: ArrayLike | None = None,
+                 color: ArrayLike | None = None) -> None:
+        self.spacing = float(spacing)
+        self.triangles = (None if triangles is None
+                          else np.asarray(triangles, dtype=float))
+        self.color = None if color is None else np.asarray(color, dtype=float)
+        if points is None and self.triangles is None:
+            raise ValueError("a Surface needs points or triangles")
+        self._points = None if points is None else (
+            np.asarray(points, dtype=float), np.asarray(normals, dtype=float),
+            np.asarray(colors, dtype=float))
+
+    def _sampled(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if self._points is None:
+            points, normals = _sample_triangles(self.triangles, self.spacing)
+            self._points = (points, normals,
+                            np.tile(self.color, (len(points), 1)))
+        return self._points
+
+    @property
+    def points(self) -> np.ndarray:
+        return self._sampled()[0]
+
+    @property
+    def normals(self) -> np.ndarray:
+        return self._sampled()[1]
+
+    @property
+    def colors(self) -> np.ndarray:
+        return self._sampled()[2]
 
 
 def look_at(eye: ArrayLike, target: ArrayLike,
@@ -105,13 +145,16 @@ class Camera:
     :param background: RGB color of everything not covered by an object
     :param bgr: return images in BGR channel order (OpenCV convention)
     :param seed: seed of the noise / jitter generator
+    :param renderer: "gl" renders the meshes with OpenGL (moderngl, headless
+        EGL), "points" with the numpy point renderer, "auto" with OpenGL if
+        it is available
     """
     def __init__(self, pose: np.ndarray | None = None, width: int = 2448,
                  height: int = 2050, fov: float | None = None,
                  K: ArrayLike | None = None, lag: float = 0.1, lag_jitter: float = 0.0,
                  fps: float | None = 30.0, noise: float = 2.0,
                  background: ArrayLike = (60, 60, 60), bgr: bool = True,
-                 seed: int | None = None) -> None:
+                 seed: int | None = None, renderer: str = "auto") -> None:
         self.pose = np.array(DEFAULT_CAMERA_POSE if pose is None else pose,
                              dtype=float)
         self.width = int(width)
@@ -135,6 +178,10 @@ class Camera:
         self.on_grab: list = []
         self._rng = np.random.default_rng(seed)
         self._render_estimate = 0.0
+        if renderer not in ("auto", "gl", "points"):
+            raise ValueError(f"unknown renderer {renderer!r}")
+        #: "auto", "gl" or "points", see the constructor
+        self.renderer = renderer
 
     # ------------------------------------------------------------------
     # Intrinsics / geometry
@@ -205,7 +252,7 @@ class Camera:
         delivered so far: a frame exposed at ``t_exp`` (a multiple of
         ``1 / fps``) is delivered at ``t_exp + lag`` (+ jitter).
 
-        Rendering takes time (~0.1 s), so the call blocks for about that long,
+        Rendering takes time (~0.05 s), so the call blocks for about that long,
         like waiting for a frame. The exposure time is chosen so that the
         frame is delivered when the call returns, i.e. the image is exactly
         ``lag`` old (+ up to one frame period). A lag shorter than the
@@ -245,25 +292,40 @@ class Camera:
         """
         t = time.monotonic() if t is None else t
         h, w = self.height, self.width
-        img = np.empty((h * w, 3), dtype=np.float32)
-        img[:] = self.background
-
-        pts, nrm, col, spc = [], [], [], []
-        for obj in self.objects:
-            for surface, pose in obj.surfaces_at(t):
-                pts.append(surface.points @ pose[:3, :3].T + pose[:3, 3])
-                nrm.append(surface.normals @ pose[:3, :3].T)
-                col.append(surface.colors)
-                spc.append(np.full(len(surface.points), surface.spacing))
-        if pts:
-            self._splat(img, np.concatenate(pts), np.concatenate(nrm),
-                        np.concatenate(col), np.concatenate(spc))
+        surfaces = [sp for obj in self.objects for sp in obj.surfaces_at(t)]
+        gl = self._gl()
+        if gl is not None:
+            img = gl.render(self, surfaces).reshape(-1, 3)
+        else:
+            img = np.empty((h * w, 3), dtype=np.float32)
+            img[:] = self.background
+            if surfaces:
+                self._splat(img, *(np.concatenate(a) for a in zip(*(
+                    (s.points @ pose[:3, :3].T + pose[:3, 3],
+                     s.normals @ pose[:3, :3].T, s.colors,
+                     np.full(len(s.points), s.spacing))
+                    for s, pose in surfaces))))
 
         if self.noise > 0:
             img += self.noise * self._rng.standard_normal(img.shape,
                                                           dtype=np.float32)
         img = np.clip(img, 0, 255).astype(np.uint8).reshape(h, w, 3)
         return img[:, :, ::-1].copy() if self.bgr else img
+
+    def _gl(self):
+        """The OpenGL renderer, None for the point renderer."""
+        if self.renderer == "points":
+            return None
+        from .gl_render import shared_renderer
+        try:
+            return shared_renderer()
+        except Exception as e:
+            if self.renderer == "gl":
+                raise
+            warnings.warn(f"OpenGL rendering is not available ({e}), the "
+                          f"camera renders with the slower point renderer")
+            self.renderer = "points"
+            return None
 
     def _splat(self, img: np.ndarray, points: np.ndarray, normals: np.ndarray,
                colors: np.ndarray, spacing: np.ndarray) -> None:
@@ -359,12 +421,21 @@ def read_stl(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
 def sample_mesh(vertices: np.ndarray, faces: np.ndarray, spacing: float,
                 color: ArrayLike) -> Surface:
     """
-    Sample points on a triangle mesh on a regular grid per triangle, at most
-    spacing apart (vertices and edges included, so there are no gaps between
-    neighbouring triangles).
+    Surface of a triangle mesh. The point renderer samples it on a regular
+    grid per triangle, at most spacing apart.
     :param color: RGB in 0..1
     """
-    tri = np.asarray(vertices, dtype=float)[np.asarray(faces)]
+    return Surface(triangles=np.asarray(vertices, dtype=float)[np.asarray(faces)],
+                   color=color, spacing=spacing)
+
+
+def _sample_triangles(tri: np.ndarray,
+                      spacing: float) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Points (and normals) on Tx3x3 triangles on a regular grid per triangle,
+    at most spacing apart (vertices and edges included, so there are no gaps
+    between neighbouring triangles).
+    """
     # put the vertex opposite the longest edge first, the grid then spans
     # the two shorter edges
     opposite = np.linalg.norm(tri[:, [1, 2, 0]] - tri[:, [2, 0, 1]], axis=2)
@@ -394,9 +465,7 @@ def sample_mesh(vertices: np.ndarray, faces: np.ndarray, spacing: float,
     # shared vertices and edges were sampled once per triangle
     _, first = np.unique(np.round(points / (spacing / 20)), axis=0,
                          return_index=True)
-    points, normals = points[first], normals[first]
-    return Surface(points, normals,
-                   np.tile(np.asarray(color, float), (len(points), 1)), spacing)
+    return points[first], normals[first]
 
 
 def color_rgb(color: int) -> np.ndarray:
