@@ -1,0 +1,6 @@
+| Puzzle | Center line                                                                                                                                                                                    | Rows |
+|--------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------|
+| A      | straight, up to z = 200                                                                                                                                                                        | 2    |
+| B      | up to z = 80, 45° bend to (70, 0, 150), up to z = 200                                                                                                                                        | 6    |
+| C      | up to z = 50, 45° to x = −50 at z = 100, 45° to y = −50 at z = 150, up to z = 200 (this one bends in 3D)                                                                                | 8    |
+| D      | up to z = 30, 45° to x = −15 at z = 45, up to z = 105, 50 mm‑radius quarter arc, horizontal to the tip at x = 85, z = 155 (arc sampled every 15°)                                            | 13   |
