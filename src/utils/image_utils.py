@@ -129,15 +129,14 @@ def find_aruco_homography(path, marker_world_corners):
     )
     return M
 
+
 def localize_base(image, homography_M):
-    # Take the hoop points and transform them to image space with with M^-1
-    M_inv = np.linalg.inv(homography_M)
 
     corners, ids = detect_aruco(image)
 
     if len(corners) != 2:
         # No base found
-        return -1
+        return None
 
     corners = np.array(corners)
 
@@ -159,13 +158,8 @@ def localize_base(image, homography_M):
     X_real = base_center_robot[0] / base_center_robot[2]
     Y_real = base_center_robot[1] / base_center_robot[2]
 
-    # get rotation
-    #c_o_aruco_mass_homogen = np.c_[c_o_aruco_mass, np.ones(c_o_aruco_mass.shape[0])]
-    #aruco_in_robot = homography_M @ c_o_aruco_mass_homogen.T
-    #aruco_v_diff = aruco_in_robot[np.where(ids == 1)] - aruco_in_robot[np.where(ids == 2)]
-    #ang = np.arctan2(aruco_v_diff[0, 0], aruco_v_diff[0, 1])# - np.pi/4
-    #norm_ang = np.arctan2(np.sin(ang), np.cos(ang))
 
+    # get rotation
     tag = corners[0][0]
     edges_px = np.array([
     [tag[0][0], tag[0][1], 1.0],
@@ -186,10 +180,6 @@ def localize_base(image, homography_M):
     ang = np.arctan2(dy, dx)
     print(ang)
 
-    # Získání souřadnic rohů a přetypování na int pro kreslení
-    levy_horni_px = (int(tag[0][0]), int(tag[0][1]))
-    pravy_horni_px = (int(tag[1][0]), int(tag[1][1]))
-
     cos_a = np.cos(ang)
     sin_a = np.sin(ang)
     transform = np.eye(4)
@@ -202,3 +192,58 @@ def localize_base(image, homography_M):
 
     return transform
     
+
+def find_circle_from_points(points):
+    points = np.asarray(points)
+    x = points[:, 0]
+    y = points[:, 1]
+    
+    #Ax -b least square solution
+    A = np.column_stack((2 * x, 2 * y, np.ones(len(x))))
+    B = x**2 + y**2
+    
+    c, residues, rank, s = np.linalg.lstsq(A, B, rcond=None)
+    
+    #result solution
+    x_c = c[0]
+    y_c = c[1]
+    
+    #R calculation
+    C = c[2]
+    R = np.sqrt(C + x_c**2 + y_c**2)
+    
+    return (x_c, y_c), R
+
+def base_rotation_params(images, homography_M): #returns (x,y) ,r
+
+    if len(images) < 3:
+        print("not enough images to find parameters")
+        return None
+    
+    poses = []
+    idxs = []
+    for idx, image in enumerate(images):
+        pos = localize_base(image, homography_M)
+        
+        if pos is None:
+            continue
+
+        poses.append(pos)
+        idxs.append(idx)
+
+    if len(poses) < 3:
+        print("not enough stand centers")
+        return None
+    
+    pts = np.stack(poses)[:, :2, 3]
+    return find_circle_from_points(pts)
+
+
+
+
+    
+        
+
+
+
+
