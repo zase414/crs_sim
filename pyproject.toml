@@ -14,12 +14,12 @@ dependencies = [
     "meshcat>=0.3",
     "opencv-python",
     "moderngl>=5.8",
+    "trimesh>=4",
+    "cascadio>=0.0.13"
 ]
 
 [project.optional-dependencies]
 dev = ["pytest"]
-# CAD files (STEP, STL, ...) in Visualizer.show_mesh
-step = ["trimesh>=4", "cascadio>=0.0.13"]
 
 [tool.setuptools.packages.find]
 include = ["crs_sim*"]
