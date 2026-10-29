@@ -76,5 +76,16 @@ img = robot.grab_image()
 pose = localize_base(img, M)
 print(pose)
 
+q0 = robot.get_q()
+final_pose = np.eye(4)
+final_pose[0, 3] = pose[0]
+final_pose[1, 3] = pose[1]
+final_pose[2, 3] = pose[2]
+
+print(final_pose)
+qs = robot.ik(final_pose)
+q = min(qs, key=lambda q: np.linalg.norm(q-q0))
+robot.move_to_q(q)
+
 robot.stop_robot()
 robot.close_connection()

@@ -31,7 +31,7 @@ def find_hoop(img):
     gray_img = cv2.medianBlur(gray_img, 3)
     rows = gray_img.shape[0]
 
-    circles = cv2.HoughCircles(gray_img, cv2.HOUGH_GRADIENT, 1, rows / 8, param1 = 100, param2 = 40, minRadius = 40, maxRadius = 90)
+    circles = cv2.HoughCircles(gray_img, cv2.HOUGH_GRADIENT, 1, rows / 8, param1 = 100, param2 = 40, minRadius = 40, maxRadius = 200)
     if circles is None:
         return None
     return circles[0]
