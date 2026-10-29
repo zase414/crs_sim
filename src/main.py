@@ -1,6 +1,8 @@
 from ctu_mitsubishi import Rv6s
 import numpy as np
 from src.utils.image_utils import *
+from src.utils.movement import move_rel, move_abs
+
 # RUN IN SIMULATION: python -m crs_sim.launch [scene options] src/main.py [main.py args]
 
 def main():
@@ -21,12 +23,9 @@ def main():
     final_pose = robot.fk(q0)
     final_pose[0, 3] = pos[0]
     final_pose[1, 3] = pos[1]
-    final_pose[2, 3] = 0.345
+    final_pose[2, 3] = 0.045
 
-    qs = robot.ik(final_pose)
-    q1 = robot.get_q()
-    q = min(qs, key=lambda q: np.linalg.norm(q-q1))
-    robot.move_to_q(q)
+    move_abs(robot, final_pose)
 
 if __name__ == "__main__":
     main()
