@@ -24,8 +24,8 @@ def main():
     pos = localize_base(img, H)
     print(pos)
     final_pose = robot.fk(q0)
-    final_pose[0, 3] = pos[0]
-    final_pose[1, 3] = pos[1]
+    final_pose[0, 3] = pos[0,3]
+    final_pose[1, 3] = pos[1,3]
     final_pose[2, 3] = 0.045
 
     move_abs(robot, final_pose)
