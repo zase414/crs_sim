@@ -72,18 +72,17 @@ for i in range(4):
 M = find_hoop_homography(images, effector_poses)
 
 # save homography
-np.save("utils/homography.npy", M)
+np.save("homography.npy", M)
 
 robot.move_to_q([np.pi*0.8, 0, 0, 0, 0, 0])
 img = robot.grab_image()
 pose = localize_base(img, M)
 print(pose)
 
-q0 = robot.get_q()
-final_pose = np.eye(4)
+final_pose = robot.fk(q0)
 final_pose[0, 3] = pose[0]
 final_pose[1, 3] = pose[1]
-final_pose[2, 3] = pose[2]
+final_pose[2, 3] = 0.345
 
 print(final_pose)
 qs = robot.ik(final_pose)

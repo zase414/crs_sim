@@ -146,9 +146,16 @@ def localize_base(image, homography_M):
 
     center_of_base_cam = np.mean(c_o_aruco_mass, axis = 0).squeeze()
     print(center_of_base_cam)
+    #cv2.circle(image, (int(center_of_base_cam[0]), int(center_of_base_cam[1])), 10, (255, 0, 0), -1)
+    #smaller = cv2.resize(image, (1280, 720))
+    #cv2.imshow("center of base", smaller)
+    #cv2.waitKey()
+    #cv2.destroyAllWindows()
 
-    homogen_center = np.append(center_of_base_cam, 1)
+    homogen_center = np.append(center_of_base_cam, 1.0)
 
     base_center_robot = homography_M @ homogen_center
-    return base_center_robot
+    X_real = base_center_robot[0] / base_center_robot[2]
+    Y_real = base_center_robot[1] / base_center_robot[2]
+    return [X_real, Y_real]
     
