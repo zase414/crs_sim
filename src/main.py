@@ -12,7 +12,7 @@ def main():
 
     H = np.load("src/utils/homography.npy")
 
-    robot.move_to_q(q0 + [0.8*np.pi, 0.0, 0.0, 1.0, 0.0, 0.0])
+    robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
 
     img = robot.grab_image()   
 
