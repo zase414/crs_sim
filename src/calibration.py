@@ -33,14 +33,25 @@ robot.wait_for_motion_stop()
 
 
 #moving along xy
-def move(offset_pose):
+def move_rel(offset_pose):
     qi = robot.get_q()
     curr_pose = robot.fk(qi)
 
     target_pose = curr_pose @ offset_pose
-    qs = robot.ik(target_pose)
 
-    q = min(qs, key=lambda q: np.linalg.norm(q-qi))
+    move_abs(target_pose)
+
+def move_abs(target_pose):
+    qi = robot.get_q()
+
+    # IK + only solutions within joint limits
+    qs = [q for q in robot.ik(target_pose) if robot.in_limits(q)]
+    if not qs:
+        print("Skipping move: unreachable, target", target_pose[:3, 3].round(3))
+        return False
+
+    q = min(qs, key=lambda q: np.linalg.norm(q - qi))
+
     robot.move_to_q(q)
     robot.wait_for_motion_stop()
 
@@ -51,21 +62,22 @@ dir = -1
 for i in range(4):
     images.append(robot.grab_image())
     effector_poses.append(robot.fk(robot.get_q())) # this is nigga
-    for j in range(4):
+    for j in range(5):
         offset_pose = np.eye(4)
-        offset_pose[1,3] = dir*0.07
+        offset_pose[1,3] = dir*0.1
 
-        move(offset_pose)
+        move_rel(offset_pose)
 
         time.sleep(0.5)
         images.append(robot.grab_image())
         effector_poses.append(robot.fk(robot.get_q())) # this is nigga
 
-    offset_pose = np.eye(4)
-    offset_pose[0,3] = -0.07
-
-    move(offset_pose)
+    if i !=3:
+        offset_pose = np.eye(4)
+        offset_pose[0,3] = -0.1
+        move_rel(offset_pose)
     dir *=-1
+
 
 #np.save("images_hoop.npy", images)
 #np.save("effector_poses.npy", effector_poses)
