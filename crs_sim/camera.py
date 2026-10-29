@@ -64,10 +64,23 @@ def look_at(eye: ArrayLike, target: ArrayLike,
     return pose
 
 
-#: Default camera pose: 1.6 m above the base, looking straight down at the
-#: workspace in front of the robot. The robot base is at the bottom of the
-#: image, base +x points up in the image.
-DEFAULT_CAMERA_POSE = look_at([0.45, 0.0, 1.6], [0.45, 0.0, 0.0])
+#: Default camera pose, calibrated on the real RV6S workcell: solvePnP of the
+#: hoop center seen at 16 known arm poses (src/utils/images_hoop.npy,
+#: src/utils/effector_poses.npy), 2.4 px mean reprojection error. The camera
+#: is ~1.35 m above the base, looking down (tilted ~4 deg), base +x points up
+#: and base +y left in the image.
+DEFAULT_CAMERA_POSE = np.array([
+    [0.009319, -0.999928, -0.007554, 0.576506],
+    [-0.997594, -0.009816, 0.068625, 0.007372],
+    [-0.068694, 0.006896, -0.997614, 1.350303],
+    [0.0, 0.0, 0.0, 1.0]])
+
+#: Intrinsics of the real camera at its full 2448x2050 resolution, from the
+#: ChArUco calibration (src/utils/cam_K.npy).
+DEFAULT_CAMERA_K = np.array([[4777.67313, 0.0, 1266.44084],
+                             [0.0, 4776.70817, 1009.90102],
+                             [0.0, 0.0, 1.0]])
+DEFAULT_CAMERA_SIZE = (2448, 2050)
 
 
 class Camera:
@@ -78,7 +91,10 @@ class Camera:
         :data:`DEFAULT_CAMERA_POSE` if None
     :param width: image width [px]
     :param height: image height [px]
-    :param fov: horizontal field of view [rad]
+    :param fov: horizontal field of view [rad] of an ideal pinhole (principal
+        point in the image center); None for the real camera's intrinsics
+        :data:`DEFAULT_CAMERA_K`, scaled to ``width`` x ``height``
+    :param K: 3x3 intrinsic matrix, overrides ``fov``
     :param lag: input lag [s], the image shows the scene ``lag`` seconds ago.
         Can be changed at any time (``robot.camera.lag = 0.2``).
     :param lag_jitter: standard deviation of a random extra lag [s] (only
@@ -91,8 +107,8 @@ class Camera:
     :param seed: seed of the noise / jitter generator
     """
     def __init__(self, pose: np.ndarray | None = None, width: int = 2448,
-                 height: int = 2050, fov: float = np.deg2rad(60),
-                 lag: float = 0.1, lag_jitter: float = 0.0,
+                 height: int = 2050, fov: float | None = None,
+                 K: ArrayLike | None = None, lag: float = 0.1, lag_jitter: float = 0.0,
                  fps: float | None = 30.0, noise: float = 2.0,
                  background: ArrayLike = (60, 60, 60), bgr: bool = True,
                  seed: int | None = None) -> None:
@@ -100,7 +116,8 @@ class Camera:
                              dtype=float)
         self.width = int(width)
         self.height = int(height)
-        self.fov = float(fov)
+        self.fov = None if fov is None else float(fov)
+        self.intrinsics = None if K is None else np.array(K, dtype=float)
         self.lag = float(lag)
         self.lag_jitter = float(lag_jitter)
         self.fps = fps
@@ -122,6 +139,12 @@ class Camera:
     @property
     def K(self) -> np.ndarray:
         """3x3 intrinsic matrix."""
+        if self.intrinsics is not None:
+            return self.intrinsics
+        if self.fov is None:
+            sx = self.width / DEFAULT_CAMERA_SIZE[0]
+            sy = self.height / DEFAULT_CAMERA_SIZE[1]
+            return np.diag([sx, sy, 1.0]) @ DEFAULT_CAMERA_K
         f = self.width / 2 / math.tan(self.fov / 2)
         return np.array([[f, 0, (self.width - 1) / 2],
                          [0, f, (self.height - 1) / 2],

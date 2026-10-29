@@ -48,8 +48,9 @@ class Scene:
 
     def camera(self) -> Camera:
         a = self.args
+        fov = None if a.camera_fov is None else np.deg2rad(a.camera_fov)
         return Camera(width=a.camera_width, height=a.camera_height,
-                      fov=np.deg2rad(a.camera_fov), lag=a.lag, noise=a.noise)
+                      fov=fov, lag=a.lag, noise=a.noise)
 
     def create_robot(self, tty_dev="/dev/mars", baudrate=19200, **kwargs):
         """Stand-in for ctu_crs.CRS97: the simulated robot in the scene.
@@ -208,8 +209,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     cam.add_argument("--noise", type=float, default=2.0, help="pixel noise (std)")
     cam.add_argument("--camera-width", type=int, default=2448)
     cam.add_argument("--camera-height", type=int, default=2050)
-    cam.add_argument("--camera-fov", type=float, default=60.0,
-                     help="horizontal field of view [deg]")
+    cam.add_argument("--camera-fov", type=float, default=None,
+                     help="horizontal field of view [deg] of an ideal "
+                          "pinhole, default: the real camera's calibration")
 
     sim = parser.add_argument_group("simulation")
     sim.add_argument("--speedup", type=float, default=1.0,

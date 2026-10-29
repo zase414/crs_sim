@@ -41,10 +41,12 @@ def test_project_backproject_roundtrip():
 
 def test_default_camera_looks_down():
     cam = Camera()
-    assert np.allclose(cam.pose[:3, 2], [0, 0, -1])
-    # the workspace in front of the robot is in the image center
+    assert cam.pose[:3, 2] @ [0, 0, -1] > np.cos(np.deg2rad(10))
+    assert np.allclose(cam.pose[:3, :3].T @ cam.pose[:3, :3], np.eye(3),
+                       atol=1e-5)
+    # the workspace in front of the robot is in the image
     uv, _ = cam.project([[0.45, 0.0, 0.0]])
-    assert np.allclose(uv[0], [(cam.width - 1) / 2, (cam.height - 1) / 2])
+    assert 0 <= uv[0, 0] < cam.width and 0 <= uv[0, 1] < cam.height
     # base +x points up in the image
     uv, _ = cam.project([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]])
     assert uv[1, 1] < uv[0, 1]

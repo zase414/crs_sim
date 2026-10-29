@@ -261,8 +261,11 @@ All of these are keyword arguments of `CRS97(...)`:
 
 ## Camera and moving rod
 
-`robot.camera` is a pinhole camera 1.6 m above the workspace looking straight
-down (base +x points up in the image). `robot.grab_image()` renders the robot,
+`robot.camera` is a pinhole camera matching the real workcell camera: its
+intrinsics (`camera.DEFAULT_CAMERA_K`) and pose (`camera.DEFAULT_CAMERA_POSE`,
+~1.35 m above the base looking down, base +x up in the image) are calibrated
+from real images of the hoop. Pass `fov=` or `K=` to `Camera` for other
+intrinsics. `robot.grab_image()` renders the robot,
 the hoop and every object added with `robot.add_object` into an 2448x2050 BGR
 image, the way it looked `lag` seconds ago:
 
