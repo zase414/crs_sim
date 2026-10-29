@@ -7,28 +7,34 @@ def find_hoop_homography(images, hoop_positions):
 
     # todo HW03: Detect circle in each image
     circle_centers = []
-
-    for img in images:
-        circle = find_hoop(img)
-        circle_centers.append([circle[0][0], circle[0][1]])
-
-    # todo HW03: Find homography using cv2.findHomography. Use the hoop positions and circle centers.
     hoops_2D = []
-    for hoop_pos in hoop_positions:
+
+    for i, (img, hoop_pos) in enumerate(zip(images, hoop_positions)):
+        circle = find_hoop(img)
+        if circle is None:
+            print(f"find_hoop_homography: no circle in image {i}, skipping")
+            continue
+        circle_centers.append([circle[0][0], circle[0][1]])
+        # todo HW03: Find homography using cv2.findHomography. Use the hoop positions and circle centers.
         hoops_2D.append(hoop_pos[:2, 3])
     #print(hoops_2D)
+
+    if len(circle_centers) < 4:
+        raise RuntimeError(f"Need at least 4 detected circles for homography, got {len(circle_centers)}")
 
     M, mask = cv2.findHomography(np.array(circle_centers), np.array(hoops_2D), cv2.RANSAC, 5.0)
 
     return M
 
 def find_hoop(img):
-  gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-  gray_img = cv2.medianBlur(gray_img, 3)
-  rows = gray_img.shape[0]
+    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_img = cv2.medianBlur(gray_img, 3)
+    rows = gray_img.shape[0]
 
-  circle = cv2.HoughCircles(gray_img, cv2.HOUGH_GRADIENT, 1, rows / 8, param1 = 100, param2 = 100, minRadius = 50, maxRadius = 200)[0]
-  return circle
+    circles = cv2.HoughCircles(gray_img, cv2.HOUGH_GRADIENT, 1, rows / 8, param1 = 100, param2 = 40, minRadius = 40, maxRadius = 90)
+    if circles is None:
+        return None
+    return circles[0]
 
 def detect_aruco(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
