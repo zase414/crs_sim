@@ -1,0 +1,10 @@
+# Normalize line endings to LF for everyone (stops CRLF churn from Windows checkouts)
+* text=auto eol=lf
+
+# Never touch binaries
+*.npy binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.bmp binary
+*.pyc binary
