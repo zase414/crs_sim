@@ -28,6 +28,7 @@ def main():
             time.sleep(photo_sleep)
 
         base_pos = localize_base(images[0], H)
+        base_pos[2,3] = 0.11
         print(base_pos)
         (rot_c_x,rot_c_y),R, ang, first_id = base_rotation_params(images, H)
         rot_period = 28.2
