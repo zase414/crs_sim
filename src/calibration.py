@@ -1,12 +1,10 @@
 import numpy as np
 import time
-import cv2
-from ctu_mitsubishi import Rv6s
+from robot.clanker import Clanker
 from src.utils.image_utils import find_hoop_homography, localize_base
-from src.utils.movement import move_rel, move_abs
 
 
-robot = Rv6s() # Connect without a real robot for offline kinematics
+robot = Clanker() # Connect without a real robot for offline kinematics
 robot.initialize()
 
 robot.soft_home()
@@ -43,7 +41,7 @@ for i in range(4):
         offset_pose = np.eye(4)
         offset_pose[1,3] = dir*0.1
 
-        move_rel(robot, offset_pose)
+        robot.move_rel(offset_pose)
 
         time.sleep(0.5)
         images.append(robot.grab_image())
@@ -52,7 +50,7 @@ for i in range(4):
     if i !=3:
         offset_pose = np.eye(4)
         offset_pose[0,3] = -0.1
-        move_rel(robot, offset_pose)
+        robot.move_rel(offset_pose)
     dir *=-1
 
 
@@ -75,7 +73,7 @@ final_pose[0, 3] = pose[0,3]
 final_pose[1, 3] = pose[1,3]
 final_pose[2, 3] = 0.11
 
-move_abs(robot, final_pose)
+robot.move_abs(final_pose)
 
 robot.stop_robot()
 robot.close_connection()

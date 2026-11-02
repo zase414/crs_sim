@@ -1,14 +1,13 @@
-from ctu_mitsubishi import Rv6s
+from robot.clanker import Clanker
 import numpy as np
 from utils.image_utils import *
-from utils.movement import move_rel, move_abs
 import time
 
 # RUN IN SIMULATION: python -m crs_sim.launch [scene options] src/main.py [main.py args]
 
 def main():
     try:
-        robot = Rv6s()
+        robot = Clanker()
         robot.initialize()
         robot.soft_home()
         robot.wait_for_motion_stop()
@@ -32,7 +31,7 @@ def main():
         final_pose[1, 3] = rot_c_y
         final_pose[2, 3] = 0.11
 
-        move_abs(robot, final_pose)
+        robot.move_abs(final_pose)
         robot.wait_for_motion_stop()
     finally:
         time.sleep(5)
