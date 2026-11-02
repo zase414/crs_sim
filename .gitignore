@@ -11,3 +11,4 @@ src/utils/effector_poses.npy
 src/utils/images_hoop.npy
 /effector_poses.npy
 /images_hoop.npy
+homography.npy

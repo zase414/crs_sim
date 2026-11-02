@@ -71,9 +71,9 @@ pose = localize_base(img, M)
 print(pose)
 
 final_pose = robot.fk(q0)
-final_pose[0, 3] = pose[0]
-final_pose[1, 3] = pose[1]
-final_pose[2, 3] = 0.045
+final_pose[0, 3] = pose[0,3]
+final_pose[1, 3] = pose[1,3]
+final_pose[2, 3] = 0.11
 
 move_abs(robot, final_pose)
 
