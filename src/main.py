@@ -12,15 +12,13 @@ def main():
         robot.soft_home()
         robot.wait_for_motion_stop()
         q0 = robot.get_q()
+        robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
 
         H = np.load("src/utils/homography.npy")
-
-        robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
-        robot.wait_for_motion_stop()
         images = []
-        for i in range(6):
+        for i in range(100):
             images.append(robot.grab_image())
-            time.sleep(2)
+            time.sleep(1)
 
         pos = localize_base(images[0], H)
         print(pos)

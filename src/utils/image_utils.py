@@ -227,7 +227,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) ,r
 
         cos_a = pos[0,0]
         angle = np.arccos(cos_a)
-        print(angle)
+        print(angle % np.pi)
         
         if pos is None:
             continue
