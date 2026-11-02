@@ -222,13 +222,18 @@ def base_rotation_params(images, homography_M): #returns (x,y) ,r
     
     poses = []
     idxs = []
+    last_angle = 0.0
     for idx, image in enumerate(images):
         pos = localize_base(image, homography_M)
 
         cos_a = pos[0,0]
         sin_a = pos[0,1]
         angle = np.atan2(sin_a, cos_a)
-        print(angle)
+        dir = angle - last_angle
+        if np.abs(dir) < np.pi :
+            print(dir)
+
+        last_angle = angle
         
         if pos is None:
             continue
