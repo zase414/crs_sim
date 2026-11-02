@@ -30,11 +30,12 @@ def main():
 
         robot.move_abs(final_pose)
     finally:
-        time.sleep(2)
+        time.sleep(1)
         robot.soft_home()
         robot.wait_for_motion_stop()
         robot.stop_robot()
         robot.close_connection()
+        print("EXIT SUCCESSFUL")
 
 if __name__ == "__main__":
     main()
