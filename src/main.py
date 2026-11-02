@@ -27,9 +27,9 @@ def main():
     (rot_c_x,rot_c_y),R = base_rotation_params(images, H)
 
     final_pose = robot.fk(q0)
-    final_pose[0, 3] = x
-    final_pose[1, 3] = y
-    final_pose[2, 3] = 0.045
+    final_pose[0, 3] = rot_c_x #0.3
+    final_pose[1, 3] = rot_c_y
+    final_pose[2, 3] = 0.11
 
     move_abs(robot, final_pose)
 
