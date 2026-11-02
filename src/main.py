@@ -68,7 +68,7 @@ def main():
         for point in puzzle:
             q = robot.get_q()
             # angle the table turned since base_pos was taken
-            d_ang = ang_speed * (time.time() - base_pos_time)
+            d_ang = ang_speed * (time.time() - base_pos_time) + 1.0
             cos_ang = np.cos(d_ang)
             sin_ang = np.sin(d_ang)
 
