@@ -31,6 +31,9 @@ def main():
             ste1 = time.time() - ste
             time.sleep(photo_sleep - ste1)
 
+        robot.soft_home()
+        robot.wait_for_motion_stop()
+
         (rot_c_x,rot_c_y),R, init_ang, first_id = base_rotation_params(images, H)
         rot_period = 28.2
         ang_speed = (2*np.pi)/rot_period
@@ -38,19 +41,19 @@ def main():
         base_pos[2,3] = 0.11
         print(base_pos)
 
-        # visualize initial_rotation
-        vis_img = images[first_id]
-        inv_H = np.linalg.inv(H)
-        start_line = inv_H @ np.array([rot_c_x, rot_c_y, 1])
-        start_x = int(start_line[0] / start_line[2])
-        start_y = int(start_line[1] / start_line[2])
-        end_x = int(start_x + R * np.cos(init_ang))
-        end_y = int(start_y + R * np.sin(init_ang))
-        cv2.line(vis_img, (start_x, start_y), (end_x, end_y), (0, 0, 255), 3)
-        vis_img = cv2.resize(vis_img, (1280, 720))
-        cv2.imshow("niggers, hate them", vis_img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # # visualize initial_rotation
+        # vis_img = images[first_id]
+        # inv_H = np.linalg.inv(H)
+        # start_line = inv_H @ np.array([rot_c_x, rot_c_y, 1])
+        # start_x = int(start_line[0] / start_line[2])
+        # start_y = int(start_line[1] / start_line[2])
+        # end_x = int(start_x + R * np.cos(init_ang))
+        # end_y = int(start_y + R * np.sin(init_ang))
+        # cv2.line(vis_img, (start_x, start_y), (end_x, end_y), (0, 0, 255), 3)
+        # vis_img = cv2.resize(vis_img, (1280, 720))
+        # cv2.imshow("niggers, hate them", vis_img)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
         # turntable rotation center
         rot_center = np.eye(4)
@@ -79,12 +82,12 @@ def main():
             current_base_pos = rot_center @ current_base_offset @ rot_center_inv @ base_pos
 
             next_robot_pose = current_base_pos @ point
-            # move_pose = robot.fk(q)
-            # move_pose[0,3] = next_robot_pose[0,3]
-            # move_pose[1,3] = next_robot_pose[1,3]
-            # move_pose[2,3] = next_robot_pose[2,3]
+            move_pose = robot.fk(q)
+            move_pose[0,3] = next_robot_pose[0,3]
+            move_pose[1,3] = next_robot_pose[1,3]
+            move_pose[2,3] = next_robot_pose[2,3]
 
-            robot.move_abs(next_robot_pose)
+            robot.move_abs(move_pose)
 
     finally:
         time.sleep(1)
