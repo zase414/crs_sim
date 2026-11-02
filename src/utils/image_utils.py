@@ -134,8 +134,9 @@ def localize_base(image, homography_M):
 
     corners, ids = detect_aruco(image)
 
-    if len(corners) not in {1, 2}:
+    if len(corners) != 2:
         # No base found
+        print("No base found")
         return None
 
     corners = np.array(corners)
