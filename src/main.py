@@ -16,7 +16,7 @@ def main():
         q0 = robot.get_q()
 
         H = np.load("src/utils/homography.npy")
-        puzzle = np.load("src/utils/key_vectors/puzzle_c_se3.npy")
+        puzzle = np.load("src/utils/key_vectors/puzzle_c_se3_interp.npy")
 
         robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
         robot.wait_for_motion_stop()
@@ -72,7 +72,7 @@ def main():
             move_pose = robot.fk(q)
             move_pose[0,3] = next_robot_pose[0,3]
             move_pose[1,3] = next_robot_pose[1,3]
-            move_pose[2,3] = next_robot_pose[2,3] + 0.011
+            move_pose[2,3] = next_robot_pose[2,3]
 
             robot.move_abs(move_pose)
 
