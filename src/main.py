@@ -1,5 +1,6 @@
 from robot.clanker import Clanker
 import numpy as np
+import cv2
 from utils.image_utils import *
 from utils.make_key_vectors import *
 import time
@@ -28,15 +29,26 @@ def main():
             images.append(robot.grab_image())
             time.sleep(photo_sleep)
 
-        base_pos = localize_base(images[0], H)
-        base_pos[2,3] = 0.11
         print(base_pos)
-        (rot_c_x,rot_c_y),R, ang, first_id = base_rotation_params(images, H)
+        (rot_c_x,rot_c_y),R, init_ang, first_id = base_rotation_params(images, H)
         rot_period = 28.2
         ang_speed = (2*np.pi)/rot_period
+        base_pos = localize_base(images[first_id], H)
+        base_pos[2,3] = 0.11
 
-        # calculating initial angle
-        init_ang = ang - (ang_speed * photo_sleep) * first_id
+        # visualize initial_rotation
+        vis_img = images[0]
+        inv_H = np.linagl.inv(H)
+        start_line = inv_H @ np.linalg([rot_c_x, rot_c_y, 1])
+        start_x = start_line[0] / start_line[2]
+        start_y = start_line[1] / start_line[2]
+        end_x = start_x + R * np.cos(init_ang)
+        end_y = start_y + R * np.sin(init_ang)
+        cv2.line(vis_img, (start_x, start_y), (end_x, end_y), (255, 0, 0), 3)
+        vis_img = cv2.resize(vis_img, (1280, 720))
+        cv2.imshow("niggers, hate them", vis_img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
         # needle head on string
         for point in puzzle:
