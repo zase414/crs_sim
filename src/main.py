@@ -52,9 +52,7 @@ def main():
 
         # needle head on string
         for i, point in enumerate(puzzle):
-            if i != 0 and point[0,3] == 0 and point[1,3] == 0:
-                continue
-            
+
             q = robot.get_q()
             # angle the table turned since base_pos was taken
             d_ang = rot_speed * (time.time() - base_pos_time)
