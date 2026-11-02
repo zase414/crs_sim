@@ -252,7 +252,18 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
         return None
     
     pts = np.stack(poses)[:, :2, 3]
-    return find_circle_from_points(pts)
+    (circle_x, circle_y), R = find_circle_from_points(pts)
+
+    # finding initial angle
+    first_pose = idxs[0]
+    start_pose = poses[0]
+
+    dx = start_pose[0,3] - circle_x
+    dy = start_pose[1,3] - circle_y
+
+    ang = np.arctan(dy, dx)
+    
+    return (circle_x, circle_y), R, ang, first_pose
 
 
 
