@@ -214,7 +214,7 @@ def find_circle_from_points(points):
     
     return (x_c, y_c), R
 
-def base_rotation_params(images, homography_M): #returns (x,y) ,r
+def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspeed
 
     if len(images) < 3:
         print("not enough images to find parameters")
@@ -222,24 +222,28 @@ def base_rotation_params(images, homography_M): #returns (x,y) ,r
     
     poses = []
     idxs = []
-    last_angle = 0.0
+    last_angle = None
+    dirs = []
     for idx, image in enumerate(images):
         pos = localize_base(image, homography_M)
 
         cos_a = pos[0,0]
         sin_a = pos[0,1]
         angle = np.atan2(sin_a, cos_a)
-        dir = angle - last_angle
-        if np.abs(dir) < np.pi :
-            print(dir)
 
+        d = angle - last_angle
+        if np.abs(d) < np.pi and last_angle is not None:
+            dirs.append(angle - last_angle)
         last_angle = angle
-        
+
+
         if pos is None:
             continue
 
         poses.append(pos)
         idxs.append(idx)
+
+    rotation_speed = np.mean(dirs)
 
     if len(poses) < 3:
         print("not enough stand centers")
