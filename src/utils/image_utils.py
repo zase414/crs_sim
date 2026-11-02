@@ -231,10 +231,11 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
         sin_a = pos[0,1]
         angle = np.atan2(sin_a, cos_a)
 
-        d = angle - last_angle
-        if np.abs(d) < np.pi and last_angle is not None:
-            dirs.append(angle - last_angle)
-        last_angle = angle
+        if last_angle is not None:
+            d = angle - last_angle
+            if np.abs(d) < np.pi:
+                dirs.append(angle - last_angle)
+            last_angle = angle
 
 
         if pos is None:
@@ -244,6 +245,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
         idxs.append(idx)
 
     rotation_speed = np.mean(dirs)
+    print(rotation_speed)
 
     if len(poses) < 3:
         print("not enough stand centers")
