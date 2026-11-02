@@ -166,10 +166,10 @@ def localize_base(image, homography_M):
     [tag[1][0], tag[1][1], 1.0]
     ])
 
-    print(edges_px)
+    # print(edges_px)
 
     robot_edges = homography_M @ edges_px.T
-    print(robot_edges)
+    # print(robot_edges)
 
     robot_left_upper = robot_edges[:2,0] / robot_edges[2, 0]
     robot_right_upper = robot_edges[:2,1] / robot_edges[2, 1]
@@ -178,7 +178,7 @@ def localize_base(image, homography_M):
     dy = robot_left_upper[1] - robot_right_upper[1]
 
     ang = np.arctan2(dy, dx)
-    print(ang)
+    # print(ang)
 
     cos_a = np.cos(ang)
     sin_a = np.sin(ang)
@@ -224,6 +224,10 @@ def base_rotation_params(images, homography_M): #returns (x,y) ,r
     idxs = []
     for idx, image in enumerate(images):
         pos = localize_base(image, homography_M)
+
+        cos_a = pos[0,0]
+        angle = np.arccos(cos_a)
+        print(angle)
         
         if pos is None:
             continue
