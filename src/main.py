@@ -34,7 +34,7 @@ def main():
         ang_speed = (2*np.pi)/rot_period
 
         # calculating initial angle
-        ini_ang = ang - (ang_speed * photo_sleep) * first_id
+        init_ang = ang - (ang_speed * photo_sleep) * first_id
 
         # needle head on string
         for point in puzzle:
