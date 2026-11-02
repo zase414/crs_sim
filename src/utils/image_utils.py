@@ -134,7 +134,7 @@ def localize_base(image, homography_M):
 
     corners, ids = detect_aruco(image)
 
-    if len(corners) != 2:
+    if len(corners) not in {1, 2}:
         # No base found
         return None
 
@@ -174,7 +174,7 @@ def localize_base(image, homography_M):
     robot_left_upper = robot_edges[:2,0] / robot_edges[2, 0]
     robot_right_upper = robot_edges[:2,1] / robot_edges[2, 1]
 
-    dx = robot_left_upper[0] - robot_right_upper[0]
+    dx = robot_right_upper[0] - robot_left_upper[0]
     dy = robot_left_upper[1] - robot_right_upper[1]
 
     ang = np.arctan2(dy, dx)
