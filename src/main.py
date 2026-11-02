@@ -51,7 +51,10 @@ def main():
         base_pos_time = image_taken_times[first_id]
 
         # needle head on string
-        for point in puzzle:
+        for i, point in enumerate(puzzle):
+            if i != 0 and point[0,3] == 0 and point[1,3] == 0:
+                continue
+            
             q = robot.get_q()
             # angle the table turned since base_pos was taken
             d_ang = rot_speed * (time.time() - base_pos_time)
@@ -71,7 +74,7 @@ def main():
             move_pose = robot.fk(q)
             move_pose[0,3] = next_robot_pose[0,3]
             move_pose[1,3] = next_robot_pose[1,3]
-            move_pose[2,3] = next_robot_pose[2,3]
+            move_pose[2,3] = next_robot_pose[2,3] + 0.011
 
             robot.move_abs(move_pose)
 

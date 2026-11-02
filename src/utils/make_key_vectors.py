@@ -31,7 +31,7 @@ BOTTOM_Z = 0.01
 #: Angular step when sampling the bend of puzzle D [rad]
 ARC_STEP = np.deg2rad(15)
 #: Largest translation / rotation between interpolated SE3 poses [m], [rad]
-SE3_STEP = 0.005
+SE3_STEP = 0.02
 SE3_ANGLE_STEP = np.deg2rad(5)
 
 OUT_DIR = Path(__file__).parent / "key_vectors"
