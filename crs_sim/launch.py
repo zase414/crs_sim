@@ -56,27 +56,44 @@ class Scene:
             camera.on_grab.append(CameraWindow(width=a.camera_window_width).show)
         return camera
 
-    def create_robot(self, tty_dev="/dev/mars", baudrate=19200, **kwargs):
-        """Stand-in for ctu_crs.CRS97: the simulated robot in the scene.
-        There is one robot, every call returns it."""
-        return self._create(SimCRS97, tty_dev, baudrate)
+    def robot_class(self, base, real_args):
+        """Stand-in for a real robot class (ctu_crs.CRS97, ctu_mitsubishi.Rv6s):
+        a subclass of the simulated robot ``base`` whose instances are the
+        robot in the scene. It is a class, so the script can derive its own
+        robot class from it (``class Clanker(Rv6s)``). There is one robot,
+        every construction after the first returns it. ``real_args`` maps the
+        real class's constructor arguments to the positional ones of ``base``.
+        """
+        scene = self
 
-    def create_rv6s(self, port="/dev/ttyUSB_Robot", baudrate=38400, debug=False):
-        """Stand-in for ctu_mitsubishi.Rv6s, see create_robot."""
-        return self._create(SimRv6s, port, baudrate, debug)
+        class Robot(base):
+            def __new__(cls, *args, **kwargs):
+                robot = scene.robot
+                if robot is None:
+                    return super().__new__(cls)
+                if not isinstance(robot, cls):
+                    raise RuntimeError(
+                        f"The simulator has one robot, the script already created "
+                        f"a {type(robot).__name__}, it cannot also create a "
+                        f"{cls.__name__}.")
+                return robot
 
-    def _create(self, cls, *args):
-        if self.robot is not None:
-            if not isinstance(self.robot, cls):
-                raise RuntimeError(
-                    f"The simulator has one robot, the script already created "
-                    f"a {type(self.robot).__name__}, it cannot also create a "
-                    f"{cls.__name__}.")
-            return self.robot
+            def __init__(self, *args, **kwargs):
+                if scene.robot is self:     # already built by the first call
+                    return
+                a = scene.args
+                super().__init__(*real_args(*args, **kwargs),
+                                 visualize=not a.headless, speedup=a.speedup,
+                                 camera=scene.camera(), on_contact=a.on_contact,
+                                 contact_margin=a.contact_margin)
+                scene._add_robot(self)
+
+        Robot.__name__ = Robot.__qualname__ = base.__name__
+        Robot.__doc__ = base.__doc__
+        return Robot
+
+    def _add_robot(self, robot) -> None:
         a = self.args
-        robot = cls(*args, visualize=not a.headless, speedup=a.speedup,
-                    camera=self.camera(), on_contact=a.on_contact,
-                    contact_margin=a.contact_margin)
         self.robot = robot
         if robot.viz is not None:
             robot.viz.show_box("table", [1.2, 1.2, 0.02],
@@ -84,7 +101,6 @@ class Scene:
                                color=0x8b6b4a)
         if a.puzzle != "none":
             self._add_puzzle(robot)
-        return robot
 
     def _add_puzzle(self, robot) -> None:
         from .puzzles import BASE_PLATE_THICKNESS, Puzzle, random_pose
@@ -152,7 +168,9 @@ def fake_ctu_crs(scene: Scene) -> types.ModuleType:
     """A ``ctu_crs`` module whose CRS97 is the simulated robot of the scene."""
     module = types.ModuleType("ctu_crs")
     module.__doc__ = "crs_sim stand-in for ctu_crs (only CRS97 is simulated)"
-    module.CRS97 = scene.create_robot
+    module.CRS97 = scene.robot_class(
+        SimCRS97,
+        lambda tty_dev="/dev/mars", baudrate=19200, **kwargs: (tty_dev, baudrate))
 
     def missing(name):
         raise AttributeError(f"ctu_crs.{name} is not simulated by crs_sim, "
@@ -165,7 +183,10 @@ def fake_ctu_mitsubishi(scene: Scene) -> types.ModuleType:
     """A ``ctu_mitsubishi`` module whose Rv6s is the simulated robot of the scene."""
     module = types.ModuleType("ctu_mitsubishi")
     module.__doc__ = "crs_sim stand-in for ctu_mitsubishi"
-    module.Rv6s = scene.create_rv6s
+    module.Rv6s = scene.robot_class(
+        SimRv6s,
+        lambda port="/dev/ttyUSB_Robot", baudrate=38400, debug=False:
+            (port, baudrate, debug))
     module.Rv6sGripper = SimRv6sGripper
 
     def missing(name):

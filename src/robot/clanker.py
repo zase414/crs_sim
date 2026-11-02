@@ -15,7 +15,7 @@ class Clanker(Rv6s):
 
         target_pose = curr_pose @ offset_pose
 
-        self.move_abs(self, target_pose)
+        return self.move_abs(target_pose)
 
     def move_abs(self, target_pose):
         assert target_pose[2,3] > 0.10, "[ERR] TABLE DESTRUCTION AVOIDED"

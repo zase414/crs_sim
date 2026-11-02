@@ -11,6 +11,7 @@ def main():
         robot = Clanker()
         robot.initialize()
         robot.soft_home()
+        robot.wait_for_motion_stop()
         q0 = robot.get_q()
 
         H = np.load("src/utils/homography.npy")

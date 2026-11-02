@@ -119,6 +119,23 @@ def test_one_robot_per_scene(tmp_path):
     assert "cannot also create a Rv6s" in result.stderr
 
 
+def test_script_can_subclass_robot(tmp_path):
+    script = tmp_path / "sub.py"
+    script.write_text(
+        "from ctu_mitsubishi import Rv6s\n"
+        "class Clanker(Rv6s):\n"
+        "    def home_q(self):\n"
+        "        return self.q_home\n"
+        "robot = Clanker()\n"
+        "assert Clanker() is robot and Rv6s() is robot\n"
+        "robot.initialize()\n"
+        "robot.move_to_q(robot.home_q())\n"
+        "assert robot.wait_for_motion_stop()\n")
+    result = launch("--headless", "--speedup", "inf", "--puzzle", "none", script)
+    assert result.returncode == 0, result.stderr
+    assert "robot Clanker" in result.stdout
+
+
 def test_script_errors_still_give_verdict(tmp_path):
     script = tmp_path / "broken.py"
     script.write_text("from ctu_crs import CRS97\nCRS97()\nraise RuntimeError('boom')\n")
