@@ -34,9 +34,8 @@ def main():
         robot.soft_home()
         robot.wait_for_motion_stop()
 
-        (rot_c_x,rot_c_y),R, init_ang, first_id = base_rotation_params(images, H)
-        rot_period = 28.2
-        ang_speed = (2*np.pi)/rot_period
+        (rot_c_x,rot_c_y),R, init_ang, first_id, rot_speed = base_rotation_params(images, H)
+        rot_speed /= photo_sleep
         base_pos = localize_base(images[first_id], H)
         base_pos[2,3] = 0.11
         print(base_pos)
@@ -55,7 +54,7 @@ def main():
         for point in puzzle:
             q = robot.get_q()
             # angle the table turned since base_pos was taken
-            d_ang = ang_speed * (time.time() - base_pos_time)
+            d_ang = rot_speed * (time.time() - base_pos_time)
             cos_ang = np.cos(d_ang)
             sin_ang = np.sin(d_ang)
 

@@ -245,7 +245,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
         poses.append(pos)
         idxs.append(idx)
 
-    rotation_speed = np.mean(dirs)
+    rotation_speed = -np.mean(dirs)
     print(rotation_speed)
 
     if len(poses) < 3:
@@ -264,7 +264,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
 
     ang = np.atan2(dy, dx)
     
-    return (circle_x, circle_y), R, ang, first_pose
+    return (circle_x, circle_y), R, ang, first_pose, rotation_speed
 
 
 
