@@ -72,7 +72,7 @@ def main():
             move_pose = robot.fk(q)
             move_pose[0,3] = next_robot_pose[0,3]
             move_pose[1,3] = next_robot_pose[1,3]
-            move_pose[2,3] = next_robot_pose[2,3]
+            move_pose[2,3] = next_robot_pose[2,3] - 0.01
 
             robot.move_abs(move_pose)
 
