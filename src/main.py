@@ -29,12 +29,12 @@ def main():
             images.append(robot.grab_image())
             time.sleep(photo_sleep)
 
-        print(base_pos)
         (rot_c_x,rot_c_y),R, init_ang, first_id = base_rotation_params(images, H)
         rot_period = 28.2
         ang_speed = (2*np.pi)/rot_period
         base_pos = localize_base(images[first_id], H)
         base_pos[2,3] = 0.11
+        print(base_pos)
 
         # visualize initial_rotation
         vis_img = images[0]
