@@ -32,9 +32,8 @@ def main():
         final_pose[2, 3] = 0.11
 
         robot.move_abs(final_pose)
-        robot.wait_for_motion_stop()
     finally:
-        time.sleep(5)
+        time.sleep(2)
         robot.soft_home()
 
         robot.stop_robot()
