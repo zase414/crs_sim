@@ -21,7 +21,7 @@ print("Current pose:", pose.round(3))
 offset_pose = np.eye(4)
 offset_pose[0, 3] = 0.1
 offset_pose[1, 3] = 0.3
-offset_pose[2, 3] = 0.6
+offset_pose[2, 3] = 0.535
 
 
 target_pose = pose @ offset_pose
