@@ -12,7 +12,6 @@ def main():
         robot.initialize()
         robot.soft_home()
         q0 = robot.get_q()
-        robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
 
         H = np.load("src/utils/homography.npy")
         puzzle = np.load("src/utils/key_vectors/puzzle_c_se3.npy")
