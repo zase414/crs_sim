@@ -15,9 +15,9 @@ def main():
 
         H = np.load("src/utils/homography.npy")
         images = []
-        for i in range(100):
+        for i in range(14):
             images.append(robot.grab_image())
-            time.sleep(1)
+            time.sleep(2)
 
         pos = localize_base(images[0], H)
         print(pos)
