@@ -40,10 +40,10 @@ def main():
         vis_img = images[first_id]
         inv_H = np.linalg.inv(H)
         start_line = inv_H @ np.array([rot_c_x, rot_c_y, 1])
-        start_x = start_line[0] / start_line[2]
-        start_y = start_line[1] / start_line[2]
-        end_x = start_x + R * np.cos(init_ang)
-        end_y = start_y + R * np.sin(init_ang)
+        start_x = int(start_line[0] / start_line[2])
+        start_y = int(start_line[1] / start_line[2])
+        end_x = int(start_x + R * np.cos(init_ang))
+        end_y = int(start_y + R * np.sin(init_ang))
         cv2.line(vis_img, (start_x, start_y), (end_x, end_y), (255, 0, 0), 3)
         vis_img = cv2.resize(vis_img, (1280, 720))
         cv2.imshow("niggers, hate them", vis_img)
