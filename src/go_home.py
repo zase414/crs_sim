@@ -1,8 +1,8 @@
-from robot.clanker import Clanker
+from ctu_mitsubishi import Rv6s
 
 def main():
     try:
-        robot = Clanker()
+        robot = Rv6s()
         robot.initialize()
         robot.soft_home()
     finally:
