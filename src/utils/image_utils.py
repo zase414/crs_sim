@@ -235,8 +235,8 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
             d = angle - last_angle
             if np.abs(d) < np.pi:
                 dirs.append(angle - last_angle)
-            last_angle = angle
 
+        last_angle = angle
 
         if pos is None:
             continue
