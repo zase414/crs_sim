@@ -18,6 +18,7 @@ class Clanker(Rv6s):
         self.move_abs(self, target_pose)
 
     def move_abs(self, target_pose):
+        assert target_pose[2,3] > 0.10, "[ERR] TABLE DESTRUCTION AVOIDED"
         qi = self.get_q()
 
         # IK + only solutions within joint limits
