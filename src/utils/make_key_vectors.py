@@ -13,8 +13,8 @@ twice: the same point with the incoming and with the outgoing direction.
 Also saved as puzzle_{a,b,c,d}_se3_interp.npy, Mx4x4 hoop poses in the maze
 frame: the key vectors densified to steps of at most SE3_STEP /
 SE3_ANGLE_STEP (position linear, rotation along the shortest arc, sharp bends
-turn in place). The z axis is the travel direction, the frame is the pointing-down
-frame diag(1, -1, -1) turned by the smallest rotation onto that direction.
+keep only their two key poses). The z axis is the travel direction, the frame
+is the pointing-down frame diag(1, -1, -1) turned by the smallest rotation onto that direction.
 
 The center lines below were measured from the STEP models of
 https://github.com/pilcsimo/ROB1-2025-hw/tree/main/puzzles (10x10 mm wire),
@@ -133,8 +133,10 @@ def se3_poses(vectors: np.ndarray) -> np.ndarray:
             T0 = poses[-1]
             w = matrix_to_rotvec(T0[:3, :3].T @ T[:3, :3])
             dp = T[:3, 3] - T0[:3, 3]
-            n = int(max(1, np.ceil(np.linalg.norm(dp) / SE3_STEP),
-                        np.ceil(np.linalg.norm(w) / SE3_ANGLE_STEP)))
+            # a sharp bend only rotates in place, keep just its two key poses
+            n = 1 if np.linalg.norm(dp) < 1e-9 else int(max(
+                1, np.ceil(np.linalg.norm(dp) / SE3_STEP),
+                np.ceil(np.linalg.norm(w) / SE3_ANGLE_STEP)))
             for s in np.linspace(0, 1, n + 1)[1:-1]:
                 Ts = np.eye(4)
                 Ts[:3, :3] = T0[:3, :3] @ rotvec_to_matrix(s * w)
