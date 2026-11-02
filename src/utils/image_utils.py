@@ -226,8 +226,9 @@ def base_rotation_params(images, homography_M): #returns (x,y) ,r
         pos = localize_base(image, homography_M)
 
         cos_a = pos[0,0]
-        angle = np.arccos(cos_a)
-        print(angle % np.pi)
+        sin_a = pos[0,1]
+        angle = np.atan2(sin_a, cos_a)
+        print(angle)
         
         if pos is None:
             continue
