@@ -10,7 +10,6 @@ def main():
         robot = Clanker()
         robot.initialize()
         robot.soft_home()
-        robot.wait_for_motion_stop()
         q0 = robot.get_q()
         robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
 
