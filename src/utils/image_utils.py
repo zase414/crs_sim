@@ -227,6 +227,9 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
     for idx, image in enumerate(images):
         pos = localize_base(image, homography_M)
 
+        if pos is None:
+            continue
+
         cos_a = pos[0,0]
         sin_a = pos[0,1]
         angle = np.atan2(sin_a, cos_a)
@@ -238,8 +241,6 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
 
         last_angle = angle
 
-        if pos is None:
-            continue
 
         poses.append(pos)
         idxs.append(idx)
@@ -261,7 +262,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
     dx = start_pose[0,3] - circle_x
     dy = start_pose[1,3] - circle_y
 
-    ang = np.arctan(dy, dx)
+    ang = np.atan2(dy, dx)
     
     return (circle_x, circle_y), R, ang, first_pose
 
