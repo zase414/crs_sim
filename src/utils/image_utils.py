@@ -186,8 +186,8 @@ def localize_base(image, homography_M):
     transform[0,3] = X_real
     transform[1,3] = Y_real
     transform[0,0] = cos_a
-    transform[0,1] = sin_a
-    transform[1,0] = -sin_a
+    transform[0,1] = -sin_a
+    transform[1,0] = sin_a
     transform[1,1] = cos_a
 
     return transform

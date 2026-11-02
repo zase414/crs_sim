@@ -79,12 +79,12 @@ def main():
             current_base_pos = rot_center @ current_base_offset @ rot_center_inv @ base_pos
 
             next_robot_pose = current_base_pos @ point
-            move_pose = robot.fk(q)
-            move_pose[0,3] = next_robot_pose[0,3]
-            move_pose[1,3] = next_robot_pose[1,3]
-            move_pose[2,3] = next_robot_pose[2,3]
+            # move_pose = robot.fk(q)
+            # move_pose[0,3] = next_robot_pose[0,3]
+            # move_pose[1,3] = next_robot_pose[1,3]
+            # move_pose[2,3] = next_robot_pose[2,3]
 
-            robot.move_abs(move_pose)
+            robot.move_abs(next_robot_pose)
 
     finally:
         time.sleep(1)
