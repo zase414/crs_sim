@@ -39,7 +39,7 @@ def main():
         # visualize initial_rotation
         vis_img = images[first_id]
         inv_H = np.linalg.inv(H)
-        start_line = inv_H @ np.linalg([rot_c_x, rot_c_y, 1])
+        start_line = inv_H @ np.array([rot_c_x, rot_c_y, 1])
         start_x = start_line[0] / start_line[2]
         start_y = start_line[1] / start_line[2]
         end_x = start_x + R * np.cos(init_ang)
