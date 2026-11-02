@@ -175,7 +175,7 @@ def localize_base(image, homography_M):
     robot_right_upper = robot_edges[:2,1] / robot_edges[2, 1]
 
     dx = robot_right_upper[0] - robot_left_upper[0]
-    dy = robot_left_upper[1] - robot_right_upper[1]
+    dy = robot_right_upper[1] - robot_left_upper[1]
 
     ang = np.arctan2(dy, dx)
     # print(ang)
@@ -231,7 +231,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
             continue
 
         cos_a = pos[0,0]
-        sin_a = pos[0,1]
+        sin_a = pos[1,0]
         angle = np.atan2(sin_a, cos_a)
 
         if last_angle is not None:
