@@ -10,6 +10,12 @@ rows [x, y, z, dx, dy, dz]:
 Rows go from the free end of the wire down to the base. A sharp bend appears
 twice: the same point with the incoming and with the outgoing direction.
 
+Also saved as puzzle_{a,b,c,d}_se3_interp.npy, Mx4x4 hoop poses in the maze
+frame: the key vectors densified to steps of at most SE3_STEP /
+SE3_ANGLE_STEP (position linear, rotation along the shortest arc, sharp bends
+turn in place). The z axis is the travel direction, the frame is the pointing-down
+frame diag(1, -1, -1) turned by the smallest rotation onto that direction.
+
 The center lines below were measured from the STEP models of
 https://github.com/pilcsimo/ROB1-2025-hw/tree/main/puzzles (10x10 mm wire),
 run this file to regenerate the arrays and check them against the meshes:
@@ -24,6 +30,9 @@ import numpy as np
 BOTTOM_Z = 0.01
 #: Angular step when sampling the bend of puzzle D [rad]
 ARC_STEP = np.deg2rad(15)
+#: Largest translation / rotation between interpolated SE3 poses [m], [rad]
+SE3_STEP = 0.005
+SE3_ANGLE_STEP = np.deg2rad(5)
 
 OUT_DIR = Path(__file__).parent / "key_vectors"
 
@@ -83,6 +92,58 @@ def key_vectors(name: str) -> np.ndarray:
     return np.array(rows[::-1])
 
 
+def rotvec_to_matrix(w: np.ndarray) -> np.ndarray:
+    """Rotation matrix of a rotation vector (Rodrigues)."""
+    angle = np.linalg.norm(w)
+    if angle < 1e-12:
+        return np.eye(3)
+    k = w / angle
+    K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+    return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * K @ K
+
+
+def matrix_to_rotvec(R: np.ndarray) -> np.ndarray:
+    """Rotation vector of a rotation matrix, angles below pi."""
+    angle = np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))
+    if angle < 1e-12:
+        return np.zeros(3)
+    w = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+    return angle * w / (2 * np.sin(angle))
+
+
+def direction_frame(d: np.ndarray) -> np.ndarray:
+    """Rotation with z along d: diag(1, -1, -1) turned by the smallest
+    rotation taking its z axis (0, 0, -1) onto d."""
+    down = np.array([0.0, 0.0, -1.0])
+    axis = np.cross(down, d)
+    angle = np.arctan2(np.linalg.norm(axis), down @ d)
+    if np.linalg.norm(axis) > 1e-12:
+        axis /= np.linalg.norm(axis)
+    return rotvec_to_matrix(angle * axis) @ np.diag([1.0, -1.0, -1.0])
+
+
+def se3_poses(vectors: np.ndarray) -> np.ndarray:
+    """Mx4x4 poses through the key vectors, interpolated in between."""
+    poses = []
+    for i, v in enumerate(vectors):
+        T = np.eye(4)
+        T[:3, :3] = direction_frame(v[3:] / np.linalg.norm(v[3:]))
+        T[:3, 3] = v[:3]
+        if i > 0:
+            T0 = poses[-1]
+            w = matrix_to_rotvec(T0[:3, :3].T @ T[:3, :3])
+            dp = T[:3, 3] - T0[:3, 3]
+            n = int(max(1, np.ceil(np.linalg.norm(dp) / SE3_STEP),
+                        np.ceil(np.linalg.norm(w) / SE3_ANGLE_STEP)))
+            for s in np.linspace(0, 1, n + 1)[1:-1]:
+                Ts = np.eye(4)
+                Ts[:3, :3] = T0[:3, :3] @ rotvec_to_matrix(s * w)
+                Ts[:3, 3] = T0[:3, 3] + s * dp
+                poses.append(Ts)
+        poses.append(T)
+    return np.array(poses)
+
+
 def check(name: str, vectors: np.ndarray) -> float:
     """Largest distance of the wire mesh vertices from the center line [m],
     0.00707 for a 10x10 mm wire (more at the mitred corners)."""
@@ -115,6 +176,10 @@ def main():
         print(f"{path}: {len(vectors)} key vectors, "
               f"max wire offset {1000 * check(name, vectors):.2f} mm")
         print(vectors)
+        poses = se3_poses(vectors)
+        path = OUT_DIR / f"puzzle_{name.lower()}_se3_interp.npy"
+        np.save(path, poses)
+        print(f"{path}: {len(poses)} SE3 poses")
 
 
 if __name__ == "__main__":
