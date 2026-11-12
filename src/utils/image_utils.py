@@ -132,27 +132,49 @@ def find_aruco_homography(path, marker_world_corners):
 
 def localize_base(image, homography_M):
 
+
     corners, ids = detect_aruco(image)
 
-    if len(corners) != 2:
-        # No base found
-        print("No base found")
-        return None
+    if len(corners) == 2:
+        corners = np.array(corners)
 
-    corners = np.array(corners)
+        # get center
+        c_o_aruco_mass = np.mean(corners, axis = 2).squeeze()
 
-    # get center
-    c_o_aruco_mass = np.mean(corners, axis = 2).squeeze()
-    #print(c_o_aruco_mass)
+        center_of_base_cam = np.mean(c_o_aruco_mass, axis = 0).squeeze()
+        #print(center_of_base_cam)
+        #cv2.circle(image, (int(center_of_base_cam[0]), int(center_of_base_cam[1])), 10, (255, 0, 0), -1)
+        #smaller = cv2.resize(image, (1280, 720))
+        #cv2.imshow("center of base", smaller)
+        #cv2.waitKey()
+        #cv2.destroyAllWindows()
 
-    center_of_base_cam = np.mean(c_o_aruco_mass, axis = 0).squeeze()
-    #print(center_of_base_cam)
-    #cv2.circle(image, (int(center_of_base_cam[0]), int(center_of_base_cam[1])), 10, (255, 0, 0), -1)
-    #smaller = cv2.resize(image, (1280, 720))
-    #cv2.imshow("center of base", smaller)
-    #cv2.waitKey()
-    #cv2.destroyAllWindows()
+        
+    elif len(corners) == 1:
+        #
+        print("using with only 1 corner")
+        
+        c_o_aruco_mass = np.mean(corners, axis=2).squeeze()
+        
+        dir_vec = corners[0][0][2] - corners[0][0][0]
 
+        nick = 1 if ids[0, 0]==1 else -1
+        # 53 ... dist(aruco_center, base_center), 56.6 diagonal of aruco
+        center_of_base_cam = c_o_aruco_mass + nick * dir_vec * (53 / 56.6) #
+
+        # cv2.circle(image, (int(center_of_base_cam[0]), int(center_of_base_cam[1])), 10, (255, 255, 0), -1)
+        # image = cv2.aruco.drawDetectedMarkers(image, corners, ids)
+        # smaller = cv2.resize(image, (1280, 720))
+        # cv2.imshow("center of base", smaller)
+        # cv2.waitKey()
+        # cv2.destroyAllWindows()
+
+
+
+    else:
+        print("no way to solve this shit")
+        return
+        
     homogen_center = np.append(center_of_base_cam, 1.0)
 
     base_center_robot = homography_M @ homogen_center
@@ -232,13 +254,13 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
             continue
 
         cos_a = pos[0,0]
-        sin_a = pos[0,1]
+        sin_a = pos[1,0]
         angle = np.atan2(sin_a, cos_a)
 
         if last_angle is not None:
-            d = angle - last_angle
+            d = (angle - last_angle)/(idx - idxs[-1])
             if np.abs(d) < np.pi:
-                dirs.append(angle - last_angle)
+                dirs.append(d)
 
         last_angle = angle
 
@@ -246,7 +268,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
         poses.append(pos)
         idxs.append(idx)
 
-    rotation_speed = -np.mean(dirs)
+    rotation_speed = np.mean(dirs)
     print(rotation_speed)
 
     if len(poses) < 3:

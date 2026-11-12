@@ -31,3 +31,9 @@ class Clanker(Rv6s):
 
         self.move_to_q(q)
         self.wait_for_motion_stop()
+
+    def pose_in_limits(self, target_pose):
+        qs = [q for q in self.ik(target_pose) if self.in_limits(q)]
+        if not qs:
+            return False
+        return True
