@@ -27,12 +27,10 @@ def main():
         robot.wait_for_motion_stop()
         print(robot.fk(robot.get_q()))
 
-        images = []
         valid_questionmark = False
 
         for i in range(MAX_PHOTO_DISABILITY_COUNT):
-            rot_time_start = time.time()
-
+            images = []
             image_taken_times = []
             photo_sleep = 1
             for i in range(10):
@@ -40,46 +38,39 @@ def main():
                 image_taken_times.append(time.time())
                 time.sleep(photo_sleep)
 
-            nigger = base_rotation_params(images, H)
-            if nigger is not None:
-                (rot_c_x,rot_c_y),R, init_ang, first_id, rot_speed = nigger
+            rot_params = base_rotation_params(images, H)
+            if rot_params is not None:
+                (rot_center, rot_center_inv), base_pos, last_idx, rot_speed = rot_params
                 valid_questionmark = True
                 break
+            
 
         # Did not found
         if not valid_questionmark:
             return
 
-        #meassured period of rotation: 28.2, however, only Bulgarian constant works - 27
+        #meassured period of rotation: 28.2, however, only Bulgarian constant works - 27, if rot_speed is real slow, set to zero ...no spinning
         rot_speed = np.sign(rot_speed) * ((2*np.pi)/27) if np.abs(rot_speed) > 0.05 else 0
-        print("rotation period is", (2*np.pi)/rot_speed )
-        base_pos = localize_base(images[first_id], H)
+        #print("rotation period is", (2*np.pi)/rot_speed )
         base_pos[2,3] = 0.11
-        print(base_pos)
+        #print(base_pos)
     
         robot.soft_home()
         robot.wait_for_motion_stop()
 
-        # turntable rotation center
-        rot_center = np.eye(4)
-        rot_center[0,3] = rot_c_x
-        rot_center[1,3] = rot_c_y
-        rot_center_inv = np.linalg.inv(rot_center)
 
-        if not is_in_reach(robot, puzzle[0],base_pos, rot_center, rot_center_inv):
+        if not is_in_reach(robot, puzzle[0], base_pos, rot_center, rot_center_inv):
             print("position is not reachable fuck YOU")
             return
 
 
-        # time when images[first_id] (base_pos) was taken
-        base_pos_time = image_taken_times[first_id]
+        # time when images[last_idx] (base_pos) was taken
+        base_pos_time = image_taken_times[last_idx]
 
-        print(puzzle.shape)
         start_high_pose = puzzle[0].copy()
-        start_high_pose[2, 3] += 0.02
+        start_high_pose[2, 3] += 0.02 #moves above starting position
         puzzle = np.insert(puzzle, 0, start_high_pose, axis=0)
-        print(puzzle.shape)
-
+        
 
         # needle head on string
         for i, point in enumerate(puzzle):
@@ -90,14 +81,14 @@ def main():
             cos_ang = np.cos(d_ang)
             sin_ang = np.sin(d_ang)
 
-            current_base_offset = np.array(
+            current_base_rot = np.array(
                 [[cos_ang, -sin_ang, 0, 0],
                 [sin_ang,   cos_ang, 0, 0],
                 [0,         0,       1, 0],
                 [0,         0,       0, 1]]
             )
             # rotate base_pos about the turntable center (world frame)
-            current_base_pos = rot_center @ current_base_offset @ rot_center_inv @ base_pos
+            current_base_pos = rot_center @ current_base_rot @ rot_center_inv @ base_pos
 
             next_robot_pose = current_base_pos @ point
             move_pose = robot.fk(q)

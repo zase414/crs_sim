@@ -136,6 +136,7 @@ def localize_base(image, homography_M):
     corners, ids = detect_aruco(image)
 
     if len(corners) == 2:
+
         corners = np.array(corners)
 
         # get center
@@ -151,14 +152,15 @@ def localize_base(image, homography_M):
 
         
     elif len(corners) == 1:
-        #
+
         print("using with only 1 corner")
         
         c_o_aruco_mass = np.mean(corners, axis=2).squeeze()
         
         dir_vec = corners[0][0][2] - corners[0][0][0]
 
-        nick = 1 if ids[0, 0]==1 else -1
+        nick = 1 if ids[0, 0]==1 else -1 # uncomment on real robot
+        #nick = 1 if ids[0]==1 else -1
         # 53 ... dist(aruco_center, base_center), 56.6 diagonal of aruco
         center_of_base_cam = c_o_aruco_mass + nick * dir_vec * (53 / 56.6) #
 
@@ -237,7 +239,7 @@ def find_circle_from_points(points):
     
     return (x_c, y_c), R
 
-def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspeed
+def base_rotation_params(images, homography_M): #returns (rot_center, rot_center_inv), last_pose, last_idx, rotation_speed
 
     if len(images) < 3:
         print("not enough images to find parameters")
@@ -269,7 +271,7 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
         idxs.append(idx)
 
     rotation_speed = np.mean(dirs)
-    print(rotation_speed)
+    #print(rotation_speed)
 
     if len(poses) < 3:
         print("not enough stand centers")
@@ -278,16 +280,16 @@ def base_rotation_params(images, homography_M): #returns (x,y) , r, rotationspee
     pts = np.stack(poses)[:, :2, 3]
     (circle_x, circle_y), R = find_circle_from_points(pts)
 
-    # finding initial angle
-    first_pose = idxs[0]
-    start_pose = poses[0]
+    # finding last angle
+    last_idx = idxs[-1]
+    last_pose = poses[-1]
 
-    dx = start_pose[0,3] - circle_x
-    dy = start_pose[1,3] - circle_y
-
-    ang = np.atan2(dy, dx)
+    rot_center = np.eye(4)
+    rot_center[0,3] = circle_x
+    rot_center[1,3] = circle_y
+    rot_center_inv = np.linalg.inv(rot_center)
     
-    return (circle_x, circle_y), R, ang, first_pose, rotation_speed
+    return (rot_center, rot_center_inv), last_pose, last_idx, rotation_speed
 
 
 
