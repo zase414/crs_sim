@@ -1,0 +1,514 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[czech]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage[output-decimal-marker={,},per-mode=symbol]{siunitx}
+% desetinná čárka v matematice i v textu
+\IfFileExists{textual-icomma.sty}{\usepackage{textual-icomma}}{%
+  \IfFileExists{icomma.sty}{\usepackage{icomma}}{}}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{TODO:} #1}}
+\newcommand{\R}{\mathbf{R}}
+\newcommand{\T}{\mathbf{T}}
+
+% Malý obrázek z kalibrace, nebo rámeček, pokud soubor chybí
+\newcommand{\calibimg}[1]{%
+  \IfFileExists{img/calib_#1.png}%
+    {\includegraphics[width=0.23\linewidth]{img/calib_#1.png}}%
+    {\fbox{\parbox[c][0.17\linewidth][c]{0.21\linewidth}{\centering\color{red}\scriptsize calib\_#1.png}}}}
+
+\title{Navlékání obruče na drátěné bludiště\\na rotujícím stolku robotem Mitsubishi RV-6S}
+\author{\todo{Jméno Příjmení 1} \and \todo{Jméno Příjmení 2} \and \todo{Jméno Příjmení 3}\\[1ex]
+  \small ČVUT FEL, předmět Robotika (ROB1)}
+\date{12.~listopadu 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Zpráva popisuje řešení semestrální úlohy, ve které šestiosý robot Mitsubishi RV-6S
+navléká obruč na drátěné bludiště umístěné na otáčejícím se stolku. Bludiště
+lokalizujeme jedinou kamerou Basler nad pracovištěm pomocí ArUco značek
+a homografie mezi obrazem a rovinou robota. Ze série snímků odhadneme střed
+a směr otáčení stolku, polohu bludiště v čase predikujeme a robot sleduje
+předem vypočtenou trajektorii středu obruče podél drátu. Řešení cílí na
+variantu C (trajektorie mimo rovinu).
+\end{abstract}
+
+\tableofcontents
+
+%==========================================================================
+\section{Úvod}
+\label{sec:uvod}
+
+Cílem úlohy je dostat robotem kontrastní obruč přes drátěné bludiště
+(dále \emph{drát}) připevněné na podstavci (dále \emph{základna}) s dvojicí
+ArUco značek. Základna leží na rotačním stolku (dále \emph{stolek}), který se
+během pokusu otáčí nejnižší rychlostí. Pokus je úspěšný, je-li obruč na konci
+trajektorie níže než \SI{4}{cm} nad základnou, a to do \SI{2}{min} bez dotyku
+drátu. Kolize robota se stolem, stolkem nebo se sebou samým znamená
+diskvalifikaci. Pokud robot drát nedosáhne, musí to program ohlásit a nezačít
+pohyb.
+
+Zvolili jsme \textbf{variantu C}, drát se dvěma lomy mimo jednu rovinu
+(obr.~\ref{fig:puzzle_c}), na pracovišti s robotem \textbf{Mitsubishi RV-6S}
+\cite{stations}. Rozměry drátu, základny a obruče jsou převzaty
+z repozitáře zadání \cite{rob1hw}.
+
+\paragraph{Předpoklady.}
+Kamera je nad pracovní plochou přibližně kolmo k ní a během pokusu se nehýbe.
+Základna leží celou plochou na stolku, stolek se otáčí konstantní úhlovou
+rychlostí. Orientace obruče se během navlékání nemění.
+
+\paragraph{Směr řešení.}
+Používáme pouze RGB kameru a kinematiku robota. Místo plné kalibrace kamery
+(vnitřní a vnější parametry) stačí homografie mezi obrazem a vodorovnou rovinou
+robota, protože všechny měřené body (obruč i značky) leží přibližně v rovinách
+rovnoběžných se stolem.
+
+%==========================================================================
+\section{Rozbor úlohy}
+\label{sec:rozbor}
+
+Úlohu jsme rozdělili na pět dílčích úloh (obr.~\ref{fig:pipeline}):
+
+\begin{enumerate}
+  \item \textbf{Kalibrace obraz--robot.} Vstup: snímky obruče v známých polohách
+        robota. Výstup: homografie $\mathbf{H}$ z pixelů do souřadnic $x,y$
+        robota. Provádí se jednou, výsledek se uloží.
+  \item \textbf{Lokalizace základny.} Vstup: snímek, $\mathbf{H}$. Výstup: poloha
+        a natočení základny v rovině robota.
+  \item \textbf{Odhad rotace stolku.} Vstup: série lokalizací v čase. Výstup:
+        střed otáčení, směr a úhlová rychlost stolku.
+  \item \textbf{Trajektorie po drátu.} Vstup: geometrie drátu \cite{rob1hw}.
+        Výstup: posloupnost poloh středu obruče v souřadnicích základny.
+  \item \textbf{Řízení pohybu.} Vstup: výstupy 2--4. Výstup: pohyb robota,
+        včetně kontroly dosažitelnosti před začátkem pohybu.
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      box/.style={draw,rounded corners,align=center,minimum height=1cm,text width=2.6cm,font=\small},
+      arr/.style={-{Stealth},thick}]
+    \node[box] (cal) {Kalibrace\\$\mathbf{H}$ (jednou)};
+    \node[box,right=0.8cm of cal] (loc) {Lokalizace\\základny};
+    \node[box,right=0.8cm of loc] (rot) {Odhad rotace\\stolku};
+    \node[box,right=0.8cm of rot] (ctrl) {Řízení\\pohybu};
+    \node[box,above=0.7cm of ctrl] (traj) {Trajektorie\\po drátu};
+    \node[box,below=0.7cm of loc,text width=2cm] (cam) {Kamera};
+    \draw[arr] (cal) -- (loc);
+    \draw[arr] (cam) -- (loc);
+    \draw[arr] (loc) -- node[above,font=\scriptsize]{$\T_k, t_k$} (rot);
+    \draw[arr] (rot) -- node[above,font=\scriptsize]{$\mathbf{c},\omega$} (ctrl);
+    \draw[arr] (traj) -- node[right,font=\scriptsize]{$\mathbf{P}_i$} (ctrl);
+  \end{tikzpicture}
+  \caption{Rozdělení úlohy na dílčí části a tok dat mezi nimi.}
+  \label{fig:pipeline}
+\end{figure}
+
+%==========================================================================
+\section{Řešení}
+\label{sec:reseni}
+
+\subsection{Souřadné systémy}
+Pracujeme v souřadném systému robota (dále \emph{svět}) s osou $z$ vzhůru.
+Poloha základny je homogenní transformace $\T \in SE(3)$ ze systému základny
+do světa; počátek systému základny je v patě drátu, osa $z$ míří vzhůru.
+Pohyb robota zadáváme pózou příruby $\T_\mathrm{f}$, inverzní kinematiku
+počítá ovladač robota \cite{stations}.
+
+\subsection{Kalibrace obraz--robot}
+\label{sec:kalibrace}
+
+Robot projede s obručí rovnoběžnou se stolem mřížku $4\times6$ poloh s krokem
+\SI{0,1}{m} ve výšce, ve které se pohybuje i při navlékání. V každé poloze
+pořídíme snímek a v něm najdeme obruč Houghovou transformací pro kružnice
+\cite{duda1972,opencv} (medián \num{3}$\times$\num{3}, \texttt{param1}~=~100,
+\texttt{param2}~=~40, poloměr \SIrange{40}{200}{px}). Středu kružnice
+$(u_j,v_j)$ přiřadíme polohu příruby $(x_j,y_j)$ z přímé kinematiky. Homografii
+$\mathbf{H}$ \cite{hartley2004} splňující
+\begin{equation}
+  \lambda_j \begin{pmatrix} x_j \\ y_j \\ 1 \end{pmatrix}
+  = \mathbf{H} \begin{pmatrix} u_j \\ v_j \\ 1 \end{pmatrix}
+  \label{eq:homography}
+\end{equation}
+odhadneme metodou RANSAC s prahem \SI{5}{px}. Protože páry spojují střed obruče
+v obraze s polohou \emph{příruby}, $\mathbf{H}$ v sobě zahrnuje i vodorovné
+posunutí obruče vůči přírubě. To platí, dokud se orientace příruby nezmění,
+proto ji při navlékání držíme konstantní (oddíl~\ref{sec:rizeni}).
+
+Vnitřní parametry kamery jsme pro kontrolu odhadli i z ChArUco desky
+$7\times5$ polí (pole \SI{35}{mm}, značka \SI{25}{mm}) metodou \cite{zhang2000};
+vyšlo $f_x \approx f_y \approx \SI{4777}{px}$. Pro řešení je nepotřebujeme.
+
+\subsection{Lokalizace základny}
+\label{sec:lokalizace}
+
+V obraze detekujeme ArUco značky slovníku \texttt{DICT\_4X4\_50}
+\cite{garrido2014,opencv}. Označme $\mathbf{m}_1,\mathbf{m}_2$ středy značek
+(průměr čtyř rohů) v pixelech. Jsou-li vidět obě, střed základny v obraze je
+\begin{equation}
+  \mathbf{s} = \tfrac{1}{2}(\mathbf{m}_1 + \mathbf{m}_2).
+\end{equation}
+Je-li vidět jen značka $k$ (druhou může zakrývat robot), použijeme její
+úhlopříčku $\mathbf{d} = \mathbf{p}_3 - \mathbf{p}_1$ (rohy 1 a 3), délky
+\SI{56,6}{mm}, a známou vzdálenost \SI{53}{mm} středu značky od středu základny:
+\begin{equation}
+  \mathbf{s} = \mathbf{m}_k + \sigma_k \frac{53}{56{,}6}\,\mathbf{d},
+  \qquad \sigma_1 = 1,\ \sigma_2 = -1.
+\end{equation}
+Bod $\mathbf{s}$ převedeme do světa rovnicí~\eqref{eq:homography}. Natočení
+$\varphi$ základny je úhel horní hrany první nalezené značky, jejíž oba rohy
+rovněž převedeme homografií. Výsledná poloha základny je
+\begin{equation}
+  \T = \begin{pmatrix} \R_z(\varphi) & (X,\ Y,\ z_0)^\top \\ \mathbf{0}^\top & 1 \end{pmatrix},
+  \qquad z_0 = \SI{0,11}{m},
+\end{equation}
+kde $z_0$ je výška příruby odpovídající patě drátu, nastavená
+experimentálně. \todo{Ověřit a zdůvodnit hodnotu $z_0$ z výšky stolku a
+polohy obruče vůči přírubě.}
+
+\subsection{Odhad rotace stolku}
+\label{sec:rotace}
+
+Pořídíme $N = 10$ snímků s odstupem \SI{1}{s} a každý lokalizujeme
+(oddíl~\ref{sec:lokalizace}); snímky bez značek vynecháme. Ze středů
+$(X_k,Y_k)$ určíme střed otáčení $\mathbf{c} = (a,b)$ lineární metodou
+nejmenších čtverců \cite{kasa1976}. Rovnici kružnice přepíšeme do tvaru
+lineárního v neznámých $a,b,e$:
+\begin{equation}
+  X_k^2 + Y_k^2 = 2aX_k + 2bY_k + e,
+  \qquad r = \sqrt{e + a^2 + b^2}.
+  \label{eq:circle}
+\end{equation}
+Stačí tři lokalizace; při méně než třech se celý postup opakuje, nejvýše
+třikrát, a potom program skončí bez pohybu.
+
+Směr otáčení určíme ze znaménka průměrné změny úhlu mezi po sobě jdoucími
+lokalizovanými snímky $k<l$:
+\begin{equation}
+  \hat\omega = \operatorname{mean}_{k}\frac{\varphi_l - \varphi_k}{l - k},
+  \qquad |\varphi_l - \varphi_k| < \pi.
+\end{equation}
+Velikost rychlosti neměříme, ale použijeme pevnou periodu $T_\mathrm{s}$:
+\begin{equation}
+  \omega = \begin{cases}
+    \operatorname{sgn}(\hat\omega)\,\dfrac{2\pi}{T_\mathrm{s}}, & |\hat\omega| > \SI{0,05}{rad} \text{ za snímek},\\[1ex]
+    0, & \text{jinak (stolek stojí)}.
+  \end{cases}
+\end{equation}
+Naměřená perioda nejnižšího stupně je \SI{28,2}{s}, nejlépe ale funguje
+$T_\mathrm{s} = \SI{27}{s}$. Rychlejší model částečně vyrovnává zpoždění
+mezi výpočtem cíle a dojetím robota (oddíl~\ref{sec:diskuse}).
+\todo{Doložit měření periody (počet otáček, způsob měření, rozptyl).}
+
+Polohu základny v čase $t$ predikujeme otočením poslední lokalizace
+$\T_0$ (pořízené v čase $t_0$) kolem středu $\mathbf{c}$ (obr.~\ref{fig:geometry}):
+\begin{equation}
+  \T(t) = \mathbf{C}\,\R_z\!\big(\omega(t-t_0)\big)\,\mathbf{C}^{-1}\,\T_0,
+  \qquad
+  \mathbf{C} = \begin{pmatrix} \mathbf{I} & (a,\ b,\ 0)^\top \\ \mathbf{0}^\top & 1 \end{pmatrix}.
+  \label{eq:predict}
+\end{equation}
+Zde $\R_z$ značí homogenní rotaci kolem osy $z$.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=1.1]
+    \draw[thick] (0,0) circle (2.2);
+    \fill (0,0) circle (1.5pt) node[below left] {$\mathbf{c}=(a,b)$};
+    \draw[dashed] (0,0) circle (1.4);
+    \foreach \a in {200,230,260,290} \fill[gray] (\a:1.4) circle (1.6pt);
+    \fill[blue] (290:1.4) circle (2pt) node[below right] {$\T_0$};
+    \fill[red] (20:1.4) circle (2pt) node[above left] {$\T(t)$};
+    \draw[-{Stealth},red] (295:1.75) arc (295:375:1.75);
+    \node[red,fill=white,inner sep=1pt] at (335:2.0) {$\omega(t-t_0)$};
+    \draw (0,0) -- (290:1.4);
+    \draw (0,0) -- node[above,font=\small]{$r$} (20:1.4);
+    \node at (130:2.6) {stolek};
+    \node[gray,font=\small,align=center] at (245:2.7) {lokalizace\\$(X_k,Y_k)$};
+  \end{tikzpicture}
+  \caption{Geometrie odhadu rotace: lokalizace středů základny (šedě), proložená
+  kružnice se středem $\mathbf{c}$ a poloměrem $r$ a predikce polohy základny
+  podle~\eqref{eq:predict} (červeně).}
+  \label{fig:geometry}
+\end{figure}
+
+\subsection{Trajektorie po drátu}
+\label{sec:trajektorie}
+
+Osu drátu varianty C jsme změřili z modelu STEP \cite{rob1hw} jako lomenou
+čáru (obr.~\ref{fig:puzzle_c}): svisle do $z = \SI{50}{mm}$, pod \ang{45} do
+$x = \SI{-50}{mm}$ ve $z = \SI{100}{mm}$, pod \ang{45} do $y = \SI{-50}{mm}$ ve
+$z = \SI{150}{mm}$ a svisle do volného konce v $z = \SI{200}{mm}$. Body
+procházíme od volného konce k základně, nejnižší bod je
+$z = \SI{10}{mm}$ nad základnou, čímž splníme podmínku \SI{4}{cm}.
+Úseky zahustíme lineární interpolací s krokem nejvýše \SI{20}{mm}, výsledkem
+jsou body $\mathbf{P}_i$ v souřadnicích základny. Před první bod vložíme bod
+o \SI{20}{mm} výše, ze kterého obruč na drát najíždí.
+Geometrii jsme ověřili výpočtem největší vzdálenosti vrcholů sítě STEP modelu
+od osy; pro drát průřezu $10\times\SI{10}{mm}$ vychází \SI{7,07}{mm} (polovina
+úhlopříčky průřezu), větší hodnoty jen v rozích lomů.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x={(-0.6cm,-0.35cm)},y={(1cm,0cm)},z={(0cm,1cm)},scale=2.2]
+    % osy
+    \draw[-{Stealth},gray] (0,0,0) -- (1,0,0) node[left] {$x$};
+    \draw[-{Stealth},gray] (0,0,0) -- (0,1,0) node[right] {$y$};
+    \draw[-{Stealth},gray] (0,0,0) -- (0,0,2.4) node[above] {$z$};
+    % osa drátu [dm]
+    \draw[ultra thick,blue] (0,0,0) -- (0,0,0.5) -- (-0.5,0,1.0) -- (-0.5,-0.5,1.5) -- (-0.5,-0.5,2.0);
+    \foreach \p in {(0,0,0.1),(0,0,0.3),(0,0,0.5),(-0.25,0,0.75),(-0.5,0,1.0),(-0.5,-0.25,1.25),(-0.5,-0.5,1.5),(-0.5,-0.5,1.75),(-0.5,-0.5,2.0),(-0.5,-0.5,2.2)}
+      \fill[red] \p circle (1.2pt);
+    \node[left,font=\small] at (-0.5,-0.5,2.2) {start};
+    \node[left,font=\small] at (0,0,0.1) {konec, $z=\SI{10}{mm}$};
+  \end{tikzpicture}
+  \caption{Osa drátu varianty C (modře) a ilustrativní body trajektorie středu obruče
+  $\mathbf{P}_i$ (červeně) v souřadnicích základny. Skutečný krok bodů je nejvýše \SI{20}{mm}.}
+  \label{fig:puzzle_c}
+\end{figure}
+
+\subsection{Řízení pohybu a kontrola dosažitelnosti}
+\label{sec:rizeni}
+
+\paragraph{Dosažitelnost.}
+Před pohybem ověříme, že první bod $\mathbf{P}_0$ je dosažitelný v deseti
+natočeních stolku $\theta_j = 2\pi j/10$, $j = 0,\dots,9$, tj.\ že inverzní
+kinematika má pro cílovou pózu aspoň jedno řešení v kloubových limitech. Pokud
+ne, program vypíše hlášení a skončí bez pohybu. Zkoušíme celou otáčku, protože
+neznáme předem, v jakém natočení stolku robot k drátu dojede.
+\todo{Kontrolovat i ostatní body trajektorie, nejen $\mathbf{P}_0$.}
+
+\paragraph{Sledování.}
+Pro každý bod $\mathbf{P}_i$ v okamžiku odeslání příkazu $t$ spočteme
+\begin{equation}
+  \mathbf{p}_i = \big[\T(t)\,\mathbf{P}_i\big]_{1:3,4} - (0,\ 0,\ \Delta z)^\top,
+  \qquad \Delta z = \SI{0,01}{m},
+\end{equation}
+a robot přejede na pózu příruby s polohou $\mathbf{p}_i$ a s orientací
+příruby, kterou má právě teď (konstantní orientace,
+viz oddíl~\ref{sec:kalibrace}). Ze všech řešení inverzní kinematiky v limitech
+vybereme nejbližší k aktuální konfiguraci $\mathbf{q}$ v euklidovské normě.
+Pohyb je blokující, další bod se počítá až po zastavení robota.
+
+\paragraph{Bezpečnost.}
+Cílová výška příruby musí být větší než \SI{0,10}{m}, jinak program skončí
+výjimkou (ochrana před nárazem do stolu). Po skončení i po chybě se robot
+vrátí do výchozí polohy.
+
+%==========================================================================
+\section{Implementace}
+\label{sec:implementace}
+
+Řešení je v Pythonu~3 s knihovnami NumPy a OpenCV \cite{opencv}. Robot
+ovládáme balíkem \texttt{ctu\_mitsubishi} \cite{stations}; třída
+\texttt{Clanker} z něj dědí a přidává pohyb na pózu s výběrem nejbližšího
+řešení inverzní kinematiky, relativní pohyb a kontrolu výšky. Soubory:
+\begin{itemize}
+  \item \texttt{calibration.py} -- kalibrace $\mathbf{H}$, uloží \texttt{homography.npy},
+  \item \texttt{utils/image\_utils.py} -- detekce obruče a značek, lokalizace, fit kružnice,
+  \item \texttt{utils/make\_key\_vectors.py} -- osy drátů a interpolované trajektorie,
+  \item \texttt{main.py} -- odhad rotace, kontrola dosažitelnosti, navlékání.
+\end{itemize}
+
+%==========================================================================
+\section{Experimenty}
+\label{sec:experimenty}
+
+\subsection{Simulátor}
+\label{sec:simulator}
+
+Abychom nemuseli každou změnu zkoušet na skutečném robotu, ladili jsme
+řešení v simulátoru pracoviště. Z pohledu uživatele se program
+\texttt{main.py} spustí beze změny kódu příkazem
+\begin{center}
+  \texttt{./sim.sh --puzzle C --seed 7 src/main.py}
+\end{center}
+V prohlížeči se otevře 3D scéna s robotem, stolkem a bludištěm načteným
+z modelů STEP \cite{rob1hw} (obr.~\ref{fig:sim}). Snímky z kamery se
+zobrazují v samostatném okně. Volbami lze měnit variantu bludiště, jeho polohu
+(náhodně podle \texttt{seed}), periodu a střed otáčení stolku, zpoždění
+a šum kamery. Na konci simulátor vypíše vyhodnocení: zda došlo ke kontaktu
+a jak daleko po drátu obruč došla.
+
+\begin{figure}[H]
+  \centering
+  \IfFileExists{img/simulator.png}%
+    {\includegraphics[width=0.8\linewidth]{img/simulator.png}}%
+    {\fbox{\parbox[c][5cm][c]{0.8\linewidth}{\centering\color{red} img/simulator.png}}}
+  \caption{Simulátor pracoviště: robot RV-6S s obručí nad bludištěm varianty C
+  na stolku. \todo{Doplnit snímek obrazovky.}}
+  \label{fig:sim}
+\end{figure}
+
+\subsection{Kalibrace homografie}
+\label{sec:exp_kalibrace}
+
+\emph{Cíl:} ověřit, že obruč je detekována ve všech polohách mřížky a že
+$\mathbf{H}$ převádí obraz do světa s chybou menší než vůle obruče na drátu.
+Obr.~\ref{fig:calib} ukazuje část kalibračních snímků z oddílu~\ref{sec:kalibrace}.
+
+\begin{figure}[H]
+  \centering
+  \setlength{\tabcolsep}{2pt}
+  \begin{tabular}{cccc}
+    \calibimg{01} & \calibimg{02} & \calibimg{03} & \calibimg{04} \\
+    \calibimg{05} & \calibimg{06} & \calibimg{07} & \calibimg{08} \\
+    \calibimg{09} & \calibimg{10} & \calibimg{11} & \calibimg{12} \\
+    \calibimg{13} & \calibimg{14} & \calibimg{15} & \calibimg{16} \\
+  \end{tabular}
+  \caption{Kalibrační snímky obruče v 16 z 24 poloh mřížky $4\times6$ s krokem
+  \SI{0,1}{m}. \todo{Doplnit snímky do \texttt{img/calib\_XX.png} a vyznačit
+  detekovanou kružnici.}}
+  \label{fig:calib}
+\end{figure}
+
+\todo{Tabulka zpětné projekce: chyba $\|\mathbf{H}(u_j,v_j) - (x_j,y_j)\|$ v mm
+pro všech 24 bodů, průměr a maximum.}
+
+\vspace{4cm}
+
+\subsection{Odhad rotace stolku}
+\label{sec:exp_rotace}
+
+\todo{Porovnat střed a poloměr kružnice \eqref{eq:circle} se skutečností
+(v simulátoru je známa), opakovatelnost pro několik spuštění, měření periody
+pro oba směry otáčení.}
+
+\vspace{4cm}
+
+\subsection{Úspěšnost navlékání a mapa pracovního prostoru}
+\label{sec:exp_mapa}
+
+\todo{Pro mřížku poloh základny na stolku (v simulátoru i na robotu) zaznamenat
+výsledek: úspěch / dotyk / nedosažitelné (správně ohlášeno). Zobrazit mapou nad
+pracovní plochou, zvlášť pro oba směry otáčení. Uvést počet pokusů a úspěšnost.}
+
+\vspace{6cm}
+
+%==========================================================================
+\section{Diskuse}
+\label{sec:diskuse}
+
+\paragraph{Diskrétní sledování.}
+Robot zastaví v každém bodě, zatímco se stolek otáčí dál. Bod drátu ve
+vzdálenosti $r$ od středu stolku se během pohybu trvajícího $t_\mathrm{m}$
+posune o oblouk
+\begin{equation}
+  e = r\,|\omega|\,t_\mathrm{m}.
+\end{equation}
+Pro $T_\mathrm{s} = \SI{27}{s}$ ($|\omega| \approx \SI{0,233}{rad/s}$),
+$r = \SI{0,1}{m}$ a $t_\mathrm{m} = \SI{0,2}{s}$ vychází $e \approx \SI{4,7}{mm}$.
+Tato chyba musí být menší než vůle mezi obručí a drátem.
+\todo{Doplnit vnitřní průměr obruče z \cite{rob1hw}, změřit $t_\mathrm{m}$
+a určit největší přípustné $r$.} Kratší perioda $T_\mathrm{s}$ oproti
+naměřené část tohoto zpoždění vyrovnává; přesnější by bylo cíl predikovat na
+okamžik dojezdu, $t + t_\mathrm{m}$.
+
+\paragraph{Omezení.}
+Orientace obruče je konstantní, řešení proto nelze přímo použít pro
+variantu D. Homografie platí jen pro jednu výšku a jednu orientaci obruče;
+značky leží v jiné výšce než obruč při kalibraci, což způsobí malou
+systematickou chybu, kterou kompenzují empirické posuny $z_0$ a $\Delta z$.
+\todo{Kvantifikovat chybu z rozdílu výšek.}
+
+%==========================================================================
+\section{Závěr}
+\label{sec:zaver}
+
+Řešili jsme navlékání obruče na drát varianty C na rotujícím stolku robotem
+Mitsubishi RV-6S pouze s kamerou nad pracovištěm. Obraz převádíme do roviny
+robota homografií zkalibrovanou z polohy obruče, základnu lokalizujeme
+podle ArUco značek, střed otáčení stolku získáme proložením kružnice a polohu
+drátu v čase predikujeme rotací kolem tohoto středu. Robot pak sleduje
+předem vypočtené body osy drátu s konstantní orientací obruče
+a nedosažitelnou polohu ohlásí před začátkem pohybu.
+\todo{Doplnit hlavní výsledky: úspěšnost X z Y pokusů pro oba směry otáčení,
+chyba kalibrace v mm.}
+
+%==========================================================================
+\section{Podíl členů týmu}
+\label{sec:podil}
+
+\todo{Doplnit, kdo implementoval kterou část (kalibrace, lokalizace a odhad
+rotace, trajektorie a řízení, experimenty na robotu, simulátor).}
+\begin{itemize}
+  \item \todo{Jméno 1} -- \todo{}
+  \item \todo{Jméno 2} -- \todo{}
+  \item \todo{Jméno 3} -- \todo{}
+\end{itemize}
+
+%==========================================================================
+\section{Využití umělé inteligence}
+\label{sec:ai}
+
+\begin{itemize}
+  \item AI jsme nejvíce využili k vývoji simulátoru pracoviště
+        (oddíl~\ref{sec:simulator}), který z volně stažitelných modelů STEP
+        \cite{rob1hw} sestaví scénu se stolkem a bludištěm a napodobuje
+        rozhraní ovladače robota i kameru. Díky tomu šlo ladit řešení bez
+        rezervace robota.
+  \item AI pomohla s výpočtem os drátů z modelů STEP a s jejich kontrolou
+        vůči síti modelu.
+  \item Kontrola pravopisu a stylistiky zprávy.
+  \item \todo{Doplnit nebo upravit podle skutečného použití.}
+\end{itemize}
+
+%==========================================================================
+\begin{thebibliography}{9}
+
+\bibitem{rob1hw}
+\textsc{Pilc, S.}: \emph{ROB1-2025-hw} [online]. GitHub, 2025.
+Dostupné z: \url{https://github.com/pilcsimo/ROB1-2025-hw}
+
+\bibitem{stations}
+\emph{Robotics robot stations -- dokumentace pracovišť} [online]. ČVUT CIIRC.
+Dostupné z: \url{https://robotics-robot-stations.readthedocs.io/en/latest/index.html}
+
+\bibitem{opencv}
+\textsc{Bradski, G.}: The OpenCV Library. \emph{Dr.~Dobb's Journal of Software
+Tools}, 2000.
+
+\bibitem{garrido2014}
+\textsc{Garrido-Jurado, S.; Muñoz-Salinas, R.; Madrid-Cuevas, F.\,J.;
+Marín-Jiménez, M.\,J.}: Automatic generation and detection of highly reliable
+fiducial markers under occlusion. \emph{Pattern Recognition}, 2014, 47(6),
+s.~2280--2292.
+
+\bibitem{hartley2004}
+\textsc{Hartley, R.; Zisserman, A.}: \emph{Multiple View Geometry in Computer
+Vision}. 2.~vyd. Cambridge University Press, 2004.
+
+\bibitem{zhang2000}
+\textsc{Zhang, Z.}: A flexible new technique for camera calibration.
+\emph{IEEE Transactions on Pattern Analysis and Machine Intelligence}, 2000,
+22(11), s.~1330--1334.
+
+\bibitem{duda1972}
+\textsc{Duda, R.\,O.; Hart, P.\,E.}: Use of the Hough transformation to detect
+lines and curves in pictures. \emph{Communications of the ACM}, 1972, 15(1),
+s.~11--15.
+
+\bibitem{kasa1976}
+\textsc{Kåsa, I.}: A circle fitting procedure and its error analysis.
+\emph{IEEE Transactions on Instrumentation and Measurement}, 1976, IM-25(1),
+s.~8--14.
+
+\end{thebibliography}
+
+\end{document}
