@@ -31,7 +31,7 @@
     {\fbox{\parbox[c][0.17\linewidth][c]{0.21\linewidth}{\centering\color{red}\scriptsize calib\_#1.png}}}}
 
 \title{Navlékání obruče na drátěné bludiště\\na rotujícím stolku robotem Mitsubishi RV-6S}
-\author{\todo{Jméno Příjmení 1} \and \todo{Jméno Příjmení 2} \and \todo{Jméno Příjmení 3}\\[1ex]
+\author{\todo{Jakub Kecek} \and \todo{Václav Kučera} \and \todo{Jakub Michalenko}\\[1ex]
   \small ČVUT FEL, předmět Robotika (ROB1)}
 \date{12.~listopadu 2026}
 
@@ -44,8 +44,8 @@ navléká obruč na drátěné bludiště umístěné na otáčejícím se stolk
 lokalizujeme jedinou kamerou Basler nad pracovištěm pomocí ArUco značek
 a homografie mezi obrazem a rovinou robota. Ze série snímků odhadneme střed
 a směr otáčení stolku, polohu bludiště v čase predikujeme a robot sleduje
-předem vypočtenou trajektorii středu obruče podél drátu. Řešení cílí na
-variantu C (trajektorie mimo rovinu).
+trajektorii středu obruče podél drátu, kterou průběžně dopočítává z předem vypočtených
+bodů na drátu. Řešení cílí na variantu C (trajektorie mimo rovinu).
 \end{abstract}
 
 \tableofcontents
@@ -164,7 +164,7 @@ V obraze detekujeme ArUco značky slovníku \texttt{DICT\_4X4\_50}
 \begin{equation}
   \mathbf{s} = \tfrac{1}{2}(\mathbf{m}_1 + \mathbf{m}_2).
 \end{equation}
-Je-li vidět jen značka $k$ (druhou může zakrývat robot), použijeme její
+Je-li vidět jen značka $k$ (druhou může zakrývat drát bludiště), použijeme její
 úhlopříčku $\mathbf{d} = \mathbf{p}_3 - \mathbf{p}_1$ (rohy 1 a 3), délky
 \SI{56,6}{mm}, a známou vzdálenost \SI{53}{mm} středu značky od středu základny:
 \begin{equation}
@@ -179,8 +179,7 @@ rovněž převedeme homografií. Výsledná poloha základny je
   \qquad z_0 = \SI{0,11}{m},
 \end{equation}
 kde $z_0$ je výška příruby odpovídající patě drátu, nastavená
-experimentálně. \todo{Ověřit a zdůvodnit hodnotu $z_0$ z výšky stolku a
-polohy obruče vůči přírubě.}
+experimentálně. \todo{Ověřit a zdůvodnit hodnotu $z_0$ z výšky stolku.}
 
 \subsection{Odhad rotace stolku}
 \label{sec:rotace}
@@ -196,7 +195,7 @@ lineárního v neznámých $a,b,e$:
   \label{eq:circle}
 \end{equation}
 Stačí tři lokalizace; při méně než třech se celý postup opakuje, nejvýše
-třikrát, a potom program skončí bez pohybu.
+třikrát, a potom program skončí se zprávou.
 
 Směr otáčení určíme ze znaménka průměrné změny úhlu mezi po sobě jdoucími
 lokalizovanými snímky $k<l$:
@@ -214,9 +213,11 @@ Velikost rychlosti neměříme, ale použijeme pevnou periodu $T_\mathrm{s}$:
 Naměřená perioda nejnižšího stupně je \SI{28,2}{s}, nejlépe ale funguje
 $T_\mathrm{s} = \SI{27}{s}$. Rychlejší model částečně vyrovnává zpoždění
 mezi výpočtem cíle a dojetím robota (oddíl~\ref{sec:diskuse}).
-\todo{Doložit měření periody (počet otáček, způsob měření, rozptyl).}
+\todo{Doložit měření periody (počet otáček, způsob měření, rozptyl), asi bych
+tam nenechal tu janky věc, aby to nevypadalo jakože jsme se na to vysrali,
+ale dal bych tam jak měření rychlosti bylo moc problematický.}
 
-Polohu základny v čase $t$ predikujeme otočením poslední lokalizace
+Polohu základny v čase $t$ predikujeme natočením poslední lokalizace
 $\T_0$ (pořízené v čase $t_0$) kolem středu $\mathbf{c}$ (obr.~\ref{fig:geometry}):
 \begin{equation}
   \T(t) = \mathbf{C}\,\R_z\!\big(\omega(t-t_0)\big)\,\mathbf{C}^{-1}\,\T_0,
@@ -251,6 +252,7 @@ Zde $\R_z$ značí homogenní rotaci kolem osy $z$.
 \subsection{Trajektorie po drátu}
 \label{sec:trajektorie}
 
+\todo{Tohle dát doprdele, existuje pdf, nebo říct že to udělal samotnej claude}
 Osu drátu varianty C jsme změřili z modelu STEP \cite{rob1hw} jako lomenou
 čáru (obr.~\ref{fig:puzzle_c}): svisle do $z = \SI{50}{mm}$, pod \ang{45} do
 $x = \SI{-50}{mm}$ ve $z = \SI{100}{mm}$, pod \ang{45} do $y = \SI{-50}{mm}$ ve
@@ -260,6 +262,7 @@ $z = \SI{10}{mm}$ nad základnou, čímž splníme podmínku \SI{4}{cm}.
 Úseky zahustíme lineární interpolací s krokem nejvýše \SI{20}{mm}, výsledkem
 jsou body $\mathbf{P}_i$ v souřadnicích základny. Před první bod vložíme bod
 o \SI{20}{mm} výše, ze kterého obruč na drát najíždí.
+\todo{Tady to stejný}
 Geometrii jsme ověřili výpočtem největší vzdálenosti vrcholů sítě STEP modelu
 od osy; pro drát průřezu $10\times\SI{10}{mm}$ vychází \SI{7,07}{mm} (polovina
 úhlopříčky průřezu), větší hodnoty jen v rozích lomů.
@@ -292,7 +295,7 @@ natočeních stolku $\theta_j = 2\pi j/10$, $j = 0,\dots,9$, tj.\ že inverzní
 kinematika má pro cílovou pózu aspoň jedno řešení v kloubových limitech. Pokud
 ne, program vypíše hlášení a skončí bez pohybu. Zkoušíme celou otáčku, protože
 neznáme předem, v jakém natočení stolku robot k drátu dojede.
-\todo{Kontrolovat i ostatní body trajektorie, nejen $\mathbf{P}_0$.}
+\todo{Kontrolovat i ostatní body trajektorie, nejen $\mathbf{P}_0$. Nasrat clankere}
 
 \paragraph{Sledování.}
 Pro každý bod $\mathbf{P}_i$ v okamžiku odeslání příkazu $t$ spočteme
@@ -316,7 +319,7 @@ vrátí do výchozí polohy.
 \label{sec:implementace}
 
 Řešení je v Pythonu~3 s knihovnami NumPy a OpenCV \cite{opencv}. Robot
-ovládáme balíkem \texttt{ctu\_mitsubishi} \cite{stations}; třída
+ovládáme knihovnou \texttt{ctu\_mitsubishi} \cite{stations}; třída
 \texttt{Clanker} z něj dědí a přidává pohyb na pózu s výběrem nejbližšího
 řešení inverzní kinematiky, relativní pohyb a kontrolu výšky. Soubory:
 \begin{itemize}
