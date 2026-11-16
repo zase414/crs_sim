@@ -68,7 +68,6 @@ def main():
         
         time_predbehnuti = np.sign(rot_speed) * 0.15 if np.abs(rot_speed) > 0.05 else 0
 
-        # Waiting for puzzle to get between ceraing angles, so if it's too close it won't crash into robot, even when ik
         # returns valid pose
         def calc_current_basepos():
             q = robot.get_q()
@@ -86,6 +85,7 @@ def main():
             # rotate base_pos about the turntable center (world frame)
             return q, rot_center @ current_base_rot @ rot_center_inv @ base_pos
 
+        # Waiting for puzzle to get between ceraing angles, so if it's too close it won't crash into robot, even when ik
         _, current_base_pos = calc_current_basepos() 
         current_point_pos = current_base_pos @ puzzle[0]
         ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
