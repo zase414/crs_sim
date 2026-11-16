@@ -9,6 +9,7 @@ import time
 MAX_PHOTO_DISABILITY_COUNT = 3
 
 def main():
+    robot = None
     try:
         robot = Clanker()
         robot.initialize()
@@ -24,7 +25,6 @@ def main():
 
         robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
         robot.wait_for_motion_stop()
-        #print(robot.fk(robot.get_q()))
 
         # Trying to get rotation params
         valid_questionmark = False
@@ -43,18 +43,18 @@ def main():
                 valid_questionmark = True
                 break
 
-        # Did not found
+        # Exit path: rotation parameters could not be measured after MAX_PHOTO_DISABILITY_COUNT attempts
         if not valid_questionmark:
             return
 
-        #meassured period of rotation: 28.2, however, only Bulgarian constant works - 27, if rot_speed is real slow, set to zero ...no spinning
+        # meassured period of rotation: 28.2, however, only Bulgarian constant works - 27, if rot_speed is real slow, set to zero ...no spinning
         rot_speed = np.sign(rot_speed) * ((2*np.pi)/27) if np.abs(rot_speed) > 0.05 else 0
         base_pos[2,3] = 0.11
-    
+
         robot.soft_home()
         robot.wait_for_motion_stop()
 
-        # Checking if puzzle is reachable
+        # Exit path: puzzle is outside the robot's reachable workspace
         if not is_in_reach(robot, puzzle[0], base_pos, rot_center, rot_center_inv):
             print("Unreachable")
             return
@@ -85,7 +85,7 @@ def main():
             # rotate base_pos about the turntable center (world frame)
             return q, rot_center @ current_base_rot @ rot_center_inv @ base_pos
 
-        # Waiting for puzzle to get between ceraing angles, so if it's too close it won't crash into robot, even when ik
+        # Waiting for the puzzle to pass through a certain angle range, so it isn't too close when the IK move starts
         _, current_base_pos = calc_current_basepos() 
         current_point_pos = current_base_pos @ puzzle[0]
         ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
@@ -95,9 +95,9 @@ def main():
             current_point_pos = current_base_pos @ puzzle[0]
             ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
 
-        # putting whoop on puzzle
+        # putting hoop on puzzle
         for i, point in enumerate(puzzle[:-1]):
-            
+
             q, current_base_pos = calc_current_basepos()
 
             next_robot_pose = current_base_pos @ point
@@ -109,10 +109,13 @@ def main():
             robot.move_abs(move_pose)
 
     finally:
-        robot.soft_home()
-        robot.wait_for_motion_stop()
-        robot.stop_robot()
-        robot.close_connection()
+        # Runs no matter how the try block exits (success, an early return above, or an
+        # exception), so the robot is always parked and the connection is closed safely
+        if robot is not None:
+            robot.soft_home()
+            robot.wait_for_motion_stop()
+            robot.stop_robot()
+            robot.close_connection()
         print("EXIT SUCCESSFUL")
 
 
