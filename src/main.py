@@ -89,7 +89,7 @@ def main():
         _, current_base_pos = calc_current_basepos() 
         current_point_pos = current_base_pos @ puzzle[0]
         ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
-        while(60 <= np.sign(rot_speed) * -1 * ang_puzzle_0 <= 140):
+        while(50 <= np.sign(rot_speed) * -1 * ang_puzzle_0 <= 145):
             print("waiting for hoop to be in better position")
             _, current_base_pos = calc_current_basepos()
             current_point_pos = current_base_pos @ puzzle[0]
