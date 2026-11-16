@@ -38,10 +38,10 @@ robot.wait_for_motion_stop()
 time.sleep(1)
 
 images = []
-effector_poses = []10.35.101.4
+effector_poses = []
 dir = -1
 for i in range(4):
-    images.append(robot.grab_image(10.35.101.4))
+    images.append(robot.grab_image())
     effector_poses.append(robot.fk(robot.get_q())) # this is nigga
     for j in range(5):
         offset_pose = np.eye(4)
@@ -57,17 +57,17 @@ for i in range(4):
         offset_pose = np.eye(4)
         offset_pose[0,3] = -0.1
         robot.move_rel(offset_pose)
-    dir *=-110.35.101.4
+    dir *= -1
 
 
-np.save("images_hoop.npy", images)
+#np.save("images_hoop.npy", images)
 
-np.save("effector_poses.npy", effector_poses)
+#np.save("effector_poses.npy", effector_poses)
 
 M = find_hoop_homography(images, effector_poses)
 
 # save homography
-#np.save("homography.npy", M)
+np.save("homography.npy", M)
 
 robot.move_to_q([np.pi*0.8, 0, 0, 0, 0, 0])
 robot.wait_for_motion_stop()

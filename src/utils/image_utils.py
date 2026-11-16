@@ -159,8 +159,8 @@ def localize_base(image, homography_M):
         
         dir_vec = corners[0][0][2] - corners[0][0][0]
 
-        nick = 1 if ids[0, 0]==1 else -1 # uncomment on real robot
-        #nick = 1 if ids[0]==1 else -1
+        #nick = 1 if ids[0, 0]==1 else -1 # uncomment on real robot
+        nick = 1 if ids[0]==1 else -1
         # 53 ... dist(aruco_center, base_center), 56.6 diagonal of aruco
         center_of_base_cam = c_o_aruco_mass + nick * dir_vec * (53 / 56.6) #
 

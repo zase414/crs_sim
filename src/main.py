@@ -26,6 +26,10 @@ def main():
         robot.wait_for_motion_stop()
         print(robot.fk(robot.get_q()))
 
+        #debug
+        #time.sleep()
+        #debug
+
         valid_questionmark = False
 
         for i in range(MAX_PHOTO_DISABILITY_COUNT):
@@ -62,7 +66,6 @@ def main():
             print("position is not reachable fuck YOU")
             return
 
-
         # time when images[last_idx] (base_pos) was taken
         base_pos_time = image_taken_times[last_idx]
 
@@ -89,13 +92,15 @@ def main():
             # rotate base_pos about the turntable center (world frame)
             return q, rot_center @ current_base_rot @ rot_center_inv @ base_pos
 
-        _, current_base_pos = calc_current_basepos()
-        ang_puzzle_0 = np.rad2deg(np.atan2(current_base_pos[1,0],current_base_pos[0,0]))
-        while(ang_puzzle_0 < -90 or ang_puzzle_0 < 20):
+        _, current_base_pos = calc_current_basepos() 
+        current_point_pos = current_base_pos @ puzzle[0]
+        ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
+        while(ang_puzzle_0 < np.sign(rot_speed) * -60 or ang_puzzle_0 < np.sign(rot_speed) * -140):
             time.sleep(0.5)
             print("waiting for hoop to be in better position")
             _, current_base_pos = calc_current_basepos()
-            ang_puzzle_0 = np.rad2deg(np.atan2(current_base_pos[1,0],current_base_pos[0,0]))
+            current_point_pos = current_base_pos @ puzzle[0]
+            ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
 
         for i, point in enumerate(puzzle[:-1]):
             
@@ -112,7 +117,6 @@ def main():
             robot.move_abs(move_pose)
 
     finally:
-        time.sleep(10)
         robot.soft_home()
         robot.wait_for_motion_stop()
         robot.stop_robot()
