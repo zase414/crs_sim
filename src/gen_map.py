@@ -30,6 +30,8 @@ def main():
                 # Is this point on camera reachable?
                 px = np.array([i, j, 1])
                 robot_pos = H @ px.T
+                robot_pos[0] /= robot_pos[2]
+                robot_pos[1] /= robot_pos[1]
                 robot_pos[2,3] = 0.535 + 0.04
 
                 in_limits[i,j] = robot.pose_in_limits(robot_pos)
