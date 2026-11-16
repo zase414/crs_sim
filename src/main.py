@@ -5,7 +5,6 @@ import cv2
 from utils.image_utils import *
 from utils.make_key_vectors import *
 import time
-# RUN IN SIMULATION: python -m crs_sim.launch [scene options] src/main.py [main.py args]
 
 MAX_PHOTO_DISABILITY_COUNT = 3
 
@@ -19,19 +18,16 @@ def main():
         time.sleep(1)
         q0 = robot.get_q()
         time.sleep(1)
+
         H = np.load("src/utils/homography.npy")
         puzzle = np.load("src/utils/key_vectors/puzzle_c_se3_interp.npy")
 
         robot.move_to_q(q0 + [0.5*np.pi, 0.0, 0.0, 0.0, 0.0, 0.0])
         robot.wait_for_motion_stop()
-        print(robot.fk(robot.get_q()))
+        #print(robot.fk(robot.get_q()))
 
-        #debug
-        #time.sleep()
-        #debug
-
+        # Trying to get rotation params
         valid_questionmark = False
-
         for i in range(MAX_PHOTO_DISABILITY_COUNT):
             images = []
             image_taken_times = []
@@ -47,23 +43,20 @@ def main():
                 valid_questionmark = True
                 break
 
-
         # Did not found
         if not valid_questionmark:
             return
 
         #meassured period of rotation: 28.2, however, only Bulgarian constant works - 27, if rot_speed is real slow, set to zero ...no spinning
         rot_speed = np.sign(rot_speed) * ((2*np.pi)/27) if np.abs(rot_speed) > 0.05 else 0
-        #print("rotation period is", (2*np.pi)/rot_speed )
         base_pos[2,3] = 0.11
-        #print(base_pos)
     
         robot.soft_home()
         robot.wait_for_motion_stop()
 
-
+        # Checking if puzzle is reachable
         if not is_in_reach(robot, puzzle[0], base_pos, rot_center, rot_center_inv):
-            print("position is not reachable fuck YOU")
+            print("Unreachable")
             return
 
         # time when images[last_idx] (base_pos) was taken
@@ -74,11 +67,12 @@ def main():
         puzzle = np.insert(puzzle, 0, start_high_pose, axis=0)
         
         time_predbehnuti = np.sign(rot_speed) * 0.15 if np.abs(rot_speed) > 0.05 else 0
-        # needle head on string
 
+        # Waiting for puzzle to get between ceraing angles, so if it's too close it won't crash into robot, even when ik
+        # returns valid pose
         def calc_current_basepos():
             q = robot.get_q()
-            # angle the table turned since base_pos was taken
+            # angle at which the table turned since base_pos was taken
             d_ang = rot_speed * (time.time() - base_pos_time) + time_predbehnuti
             cos_ang = np.cos(d_ang)
             sin_ang = np.sin(d_ang)
@@ -101,6 +95,7 @@ def main():
             current_point_pos = current_base_pos @ puzzle[0]
             ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
 
+        # putting whoop on puzzle
         for i, point in enumerate(puzzle[:-1]):
             
             q, current_base_pos = calc_current_basepos()

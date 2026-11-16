@@ -3,8 +3,7 @@ import time
 from robot.clanker import Clanker
 from utils.image_utils import find_hoop_homography, localize_base
 
-
-robot = Clanker() # Connect without a real robot for offline kinematics
+robot = Clanker()
 robot.initialize()
 time.sleep(1)
 

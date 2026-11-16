@@ -5,7 +5,6 @@ def find_hoop_homography(images, hoop_positions):
     images = np.asarray(images)
     assert images.shape[0] == len(hoop_positions)
 
-    # todo HW03: Detect circle in each image
     circle_centers = []
     hoops_2D = []
 
@@ -15,9 +14,7 @@ def find_hoop_homography(images, hoop_positions):
             print(f"find_hoop_homography: no circle in image {i}, skipping")
             continue
         circle_centers.append([circle[0][0], circle[0][1]])
-        # todo HW03: Find homography using cv2.findHomography. Use the hoop positions and circle centers.
         hoops_2D.append(hoop_pos[:2, 3])
-    #print(hoops_2D)
 
     if len(circle_centers) < 4:
         raise RuntimeError(f"Need at least 4 detected circles for homography, got {len(circle_centers)}")
@@ -34,6 +31,7 @@ def find_hoop(img):
     circles = cv2.HoughCircles(gray_img, cv2.HOUGH_GRADIENT, 1, rows / 8, param1 = 100, param2 = 40, minRadius = 40, maxRadius = 200)
     if circles is None:
         return None
+
     return circles[0]
 
 def detect_aruco(img):
@@ -132,7 +130,6 @@ def find_aruco_homography(path, marker_world_corners):
 
 def localize_base(image, homography_M):
 
-
     corners, ids = detect_aruco(image)
 
     if len(corners) == 2:
@@ -159,10 +156,10 @@ def localize_base(image, homography_M):
         
         dir_vec = corners[0][0][2] - corners[0][0][0]
 
-        #nick = 1 if ids[0, 0]==1 else -1 # uncomment on real robot
-        nick = 1 if ids[0]==1 else -1
+        first_id = 1 if ids[0, 0]==1 else -1 # uncomment on real robot
+        #first_id = 1 if ids[0]==1 else -1
         # 53 ... dist(aruco_center, base_center), 56.6 diagonal of aruco
-        center_of_base_cam = c_o_aruco_mass + nick * dir_vec * (53 / 56.6) #
+        center_of_base_cam = c_o_aruco_mass + first_id * dir_vec * (53 / 56.6) #
 
         # cv2.circle(image, (int(center_of_base_cam[0]), int(center_of_base_cam[1])), 10, (255, 255, 0), -1)
         # image = cv2.aruco.drawDetectedMarkers(image, corners, ids)
@@ -170,8 +167,6 @@ def localize_base(image, homography_M):
         # cv2.imshow("center of base", smaller)
         # cv2.waitKey()
         # cv2.destroyAllWindows()
-
-
 
     else:
         print("no way to solve this shit")
@@ -182,7 +177,6 @@ def localize_base(image, homography_M):
     base_center_robot = homography_M @ homogen_center
     X_real = base_center_robot[0] / base_center_robot[2]
     Y_real = base_center_robot[1] / base_center_robot[2]
-
 
     # get rotation
     tag = corners[0][0]
@@ -216,7 +210,6 @@ def localize_base(image, homography_M):
     transform[1,1] = cos_a
 
     return transform
-    
 
 def find_circle_from_points(points):
     points = np.asarray(points)
@@ -266,7 +259,6 @@ def base_rotation_params(images, homography_M): #returns (rot_center, rot_center
 
         last_angle = angle
 
-
         poses.append(pos)
         idxs.append(idx)
 
@@ -290,13 +282,3 @@ def base_rotation_params(images, homography_M): #returns (rot_center, rot_center
     rot_center_inv = np.linalg.inv(rot_center)
     
     return (rot_center, rot_center_inv), last_pose, last_idx, rotation_speed
-
-
-
-
-    
-        
-
-
-
-
