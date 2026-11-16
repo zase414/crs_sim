@@ -32,6 +32,10 @@ def main():
                 robot_pos = H @ px.T
                 robot_pos[0] /= robot_pos[2]
                 robot_pos[1] /= robot_pos[1]
+
+                move_pose = robot.fk(q)
+                move_pose[0,3] = robot_pos[0]
+                move_pose[1,3] = robot_pos[1]
                 robot_pos[2,3] = 0.535 + 0.04
 
                 in_limits[i,j] = robot.pose_in_limits(robot_pos)
