@@ -5,7 +5,6 @@ import cv2
 from utils.image_utils import *
 from utils.make_key_vectors import *
 import time
-
 # RUN IN SIMULATION: python -m crs_sim.launch [scene options] src/main.py [main.py args]
 
 MAX_PHOTO_DISABILITY_COUNT = 3
@@ -43,7 +42,7 @@ def main():
                 (rot_center, rot_center_inv), base_pos, last_idx, rot_speed = rot_params
                 valid_questionmark = True
                 break
-            
+
 
         # Did not found
         if not valid_questionmark:
@@ -71,13 +70,13 @@ def main():
         start_high_pose[2, 3] += 0.02 #moves above starting position
         puzzle = np.insert(puzzle, 0, start_high_pose, axis=0)
         
-
+        time_predbehnuti = np.sign(rot_speed) * 0.15 if np.abs(rot_speed) > 0.05 else 0
         # needle head on string
-        for i, point in enumerate(puzzle):
 
+        def calc_current_basepos():
             q = robot.get_q()
             # angle the table turned since base_pos was taken
-            d_ang = rot_speed * (time.time() - base_pos_time)
+            d_ang = rot_speed * (time.time() - base_pos_time) + time_predbehnuti
             cos_ang = np.cos(d_ang)
             sin_ang = np.sin(d_ang)
 
@@ -88,7 +87,21 @@ def main():
                 [0,         0,       0, 1]]
             )
             # rotate base_pos about the turntable center (world frame)
-            current_base_pos = rot_center @ current_base_rot @ rot_center_inv @ base_pos
+            return q, rot_center @ current_base_rot @ rot_center_inv @ base_pos
+
+        _, current_base_pos = calc_current_basepos()
+        ang_puzzle_0 = np.rad2deg(np.atan2(current_base_pos[1,0],current_base_pos[0,0]))
+        while(ang_puzzle_0 < -90 or ang_puzzle_0 < 20):
+            time.sleep(0.5)
+            print("waiting for hoop to be in better position")
+            _, current_base_pos = calc_current_basepos()
+            ang_puzzle_0 = np.rad2deg(np.atan2(current_base_pos[1,0],current_base_pos[0,0]))
+
+        for i, point in enumerate(puzzle[:-1]):
+            
+            q, current_base_pos = calc_current_basepos()
+
+            print(np.rad2deg(np.atan2(current_base_pos[1,0],current_base_pos[0,0])))
 
             next_robot_pose = current_base_pos @ point
             move_pose = robot.fk(q)
@@ -99,7 +112,7 @@ def main():
             robot.move_abs(move_pose)
 
     finally:
-        time.sleep(1)
+        time.sleep(10)
         robot.soft_home()
         robot.wait_for_motion_stop()
         robot.stop_robot()

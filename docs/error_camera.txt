@@ -1,0 +1,2 @@
+Type	Time	Source	Message
+Error	2026-11-16 13:09:31.986	camera-rv6s (21046611)	Image acquisition on "camera-rv6s (21046611)" failed! Error: "The buffer was incompletely grabbed. This can be caused by performance problems of the network hardware used, i.e., the network adapter, switch, or Ethernet cable. Buffer underruns can also cause image loss. To fix this, use the pylonGigEConfigurator tool to optimize your setup and use more buffers for grabbing in your application to prevent buffer underruns."

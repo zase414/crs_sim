@@ -23,32 +23,41 @@ def main():
         H = np.load("src/utils/homography.npy")
         puzzle = np.load("src/utils/key_vectors/puzzle_c_se3_interp.npy")
 
-        # camera resolution: 2448x2050
-        in_limits = []
-        for i in range(2448):
-            for j in range(2050):
-                # Is this point on camera reachable?
-                px = np.array([i, j, 1])
-                robot_pos = H @ px.T
-                robot_pos[0] /= robot_pos[2]
-                robot_pos[1] /= robot_pos[1]
+        img = cv2.imread("image_empty.jpg")
+        height, width = img.shape[:2]  # 2050, 2448
 
-                move_pose = robot.fk(q)
-                move_pose[0,3] = robot_pos[0]
-                move_pose[1,3] = robot_pos[1]
-                robot_pos[2,3] = 0.535 + 0.04
+        block_size = 20
+        in_limits = np.zeros((height, width), dtype=bool)
+        base_pose = robot.fk(q0)
 
-                in_limits[i,j] = robot.pose_in_limits(robot_pos)
+        for row in range(0, height, block_size):
+            for col in range(0, width, block_size):
+                # Střed bloku; souřadnice obrazu jsou [x=sloupec, y=řádek]
+                x = min(col + block_size // 2, width - 1)
+                y = min(row + block_size // 2, height - 1)
 
+                px = np.array([x, y, 1])
+                robot_pos = H @ px
+                robot_pos = robot_pos / robot_pos[2]
 
-        img = np.load("image_empty.npy")
+                move_pose = base_pose.copy()
+                move_pose[0, 3] = robot_pos[0]
+                move_pose[1, 3] = robot_pos[1]
+                move_pose[2, 3] = 0.535 + 0.04
+
+                reachable = robot.pose_in_limits(move_pose)
+                in_limits[row:min(row + block_size, height),
+                        col:min(col + block_size, width)] = reachable
+
         overlay = np.zeros_like(img, dtype=np.uint8)
         overlay[in_limits] = [0, 255, 0]
         overlay[~in_limits] = [0, 0, 255]
+
         alpha = 0.35
         result = cv2.addWeighted(img, 1 - alpha, overlay, alpha, 0)
-
         cv2.imwrite("overlay.jpg", result)
+
+
 
     finally:
         time.sleep(1)
