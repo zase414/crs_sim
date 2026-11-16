@@ -24,15 +24,9 @@
 \newcommand{\R}{\mathbf{R}}
 \newcommand{\T}{\mathbf{T}}
 
-% Malý obrázek z kalibrace, nebo rámeček, pokud soubor chybí
-\newcommand{\calibimg}[1]{%
-  \IfFileExists{img/calib_#1.png}%
-    {\includegraphics[width=0.23\linewidth]{img/calib_#1.png}}%
-    {\fbox{\parbox[c][0.17\linewidth][c]{0.21\linewidth}{\centering\color{red}\scriptsize calib\_#1.png}}}}
+\title{Navlékání obruče na puzzle\\na rotujícím stolku robotem Mitsubishi RV-6S}
 
-\title{Navlékání obruče na drátěné bludiště\\na rotujícím stolku robotem Mitsubishi RV-6S}
-\author{\todo{Jakub Kecek} \and \todo{Václav Kučera} \and \todo{Jakub Michalenko}\\[1ex]
-  \small ČVUT FEL, předmět Robotika (ROB1)}
+\author{Jakub Kecek \and Václav Kučera \and Jakub Michalenko}
 \date{12.~listopadu 2026}
 
 \begin{document}
@@ -40,12 +34,11 @@
 
 \begin{abstract}
 Zpráva popisuje řešení semestrální úlohy, ve které šestiosý robot Mitsubishi RV-6S
-navléká obruč na drátěné bludiště umístěné na otáčejícím se stolku. Bludiště
-lokalizujeme jedinou kamerou Basler nad pracovištěm pomocí ArUco značek
-a homografie mezi obrazem a rovinou robota. Ze série snímků odhadneme střed
-a směr otáčení stolku, polohu bludiště v čase predikujeme a robot sleduje
-trajektorii středu obruče podél drátu, kterou průběžně dopočítává z předem vypočtených
-bodů na drátu. Řešení cílí na variantu C (trajektorie mimo rovinu).
+navléká obruč na puzzle umístěné na otáčejícím se stolku. Puzzle
+lokalizujeme kamerou Basler pomocí ArUco značek
+a homografie mezi obrazem a rovinou robota. Robot sleduje predikovanou
+trajektorii středu obruče podél puzzle, jehož tvar je předem známý. 
+Řešení cílí na variantu C (trajektorie mimo rovinu).
 \end{abstract}
 
 \tableofcontents
@@ -54,26 +47,26 @@ bodů na drátu. Řešení cílí na variantu C (trajektorie mimo rovinu).
 \section{Úvod}
 \label{sec:uvod}
 
-Cílem úlohy je dostat robotem kontrastní obruč přes drátěné bludiště
-(dále \emph{drát}) připevněné na podstavci (dále \emph{základna}) s dvojicí
+Cílem úlohy je dostat pomocí robotického ramene obruč přes puzzle
+připevněné na podstavci (dále \emph{základna}) s dvojicí
 ArUco značek. Základna leží na rotačním stolku (dále \emph{stolek}), který se
-během pokusu otáčí nejnižší rychlostí. Pokus je úspěšný, je-li obruč na konci
+během pokusu otáčí nejnižší nastavitelnou rychlostí. Pokus je úspěšný, je-li obruč na konci
 trajektorie níže než \SI{4}{cm} nad základnou, a to do \SI{2}{min} bez dotyku
-drátu. Kolize robota se stolem, stolkem nebo se sebou samým znamená
-diskvalifikaci. Pokud robot drát nedosáhne, musí to program ohlásit a nezačít
+puzzle. Kolize robota se stolem, stolkem nebo se sebou samým znamená
+diskvalifikaci. Pokud robot na puzzle nedosáhne, musí to program ohlásit a nezačít
 pohyb.
 
-Zvolili jsme \textbf{variantu C}, drát se dvěma lomy mimo jednu rovinu
+Zvolili jsme \textbf{variantu C}, puzzle se dvěma lomy mimo jednu rovinu
 (obr.~\ref{fig:puzzle_c}), na pracovišti s robotem \textbf{Mitsubishi RV-6S}
-\cite{stations}. Rozměry drátu, základny a obruče jsou převzaty
-z repozitáře zadání \cite{rob1hw}.
+\cite{stations}. Rozměry puzzle, základny a obruče jsou převzaty
+z repozitáře zadání \cite{rob1hw}. Naše řešení je zároveň použitelné na oba směry otáčení stolku. 
 
 \paragraph{Předpoklady.}
 Kamera je nad pracovní plochou přibližně kolmo k ní a během pokusu se nehýbe.
 Základna leží celou plochou na stolku, stolek se otáčí konstantní úhlovou
-rychlostí. Orientace obruče se během navlékání nemění.
+rychlostí po nebo proti směru hodinových ručiček. Orientace obruče se během navlékání nemění.
 
-\paragraph{Směr řešení.}
+\paragraph{Úvaha.}
 Používáme pouze RGB kameru a kinematiku robota. Místo plné kalibrace kamery
 (vnitřní a vnější parametry) stačí homografie mezi obrazem a vodorovnou rovinou
 robota, protože všechny měřené body (obruč i značky) leží přibližně v rovinách
@@ -91,9 +84,9 @@ rovnoběžných se stolem.
         robota. Provádí se jednou, výsledek se uloží.
   \item \textbf{Lokalizace základny.} Vstup: snímek, $\mathbf{H}$. Výstup: poloha
         a natočení základny v rovině robota.
-  \item \textbf{Odhad rotace stolku.} Vstup: série lokalizací v čase. Výstup:
+  \item \textbf{Odhad rotace stolku.} Vstup: série lokalizací stolku v čase. Výstup:
         střed otáčení, směr a úhlová rychlost stolku.
-  \item \textbf{Trajektorie po drátu.} Vstup: geometrie drátu \cite{rob1hw}.
+  \item \textbf{Trajektorie podél puzzle.} Vstup: geometrie puzzle \cite{rob1hw}.
         Výstup: posloupnost poloh středu obruče v souřadnicích základny.
   \item \textbf{Řízení pohybu.} Vstup: výstupy 2--4. Výstup: pohyb robota,
         včetně kontroly dosažitelnosti před začátkem pohybu.
@@ -108,7 +101,7 @@ rovnoběžných se stolem.
     \node[box,right=0.8cm of cal] (loc) {Lokalizace\\základny};
     \node[box,right=0.8cm of loc] (rot) {Odhad rotace\\stolku};
     \node[box,right=0.8cm of rot] (ctrl) {Řízení\\pohybu};
-    \node[box,above=0.7cm of ctrl] (traj) {Trajektorie\\po drátu};
+    \node[box,above=0.7cm of ctrl] (traj) {Trajektorie\\podél puzzle};
     \node[box,below=0.7cm of loc,text width=2cm] (cam) {Kamera};
     \draw[arr] (cal) -- (loc);
     \draw[arr] (cam) -- (loc);
@@ -127,7 +120,7 @@ rovnoběžných se stolem.
 \subsection{Souřadné systémy}
 Pracujeme v souřadném systému robota (dále \emph{svět}) s osou $z$ vzhůru.
 Poloha základny je homogenní transformace $\T \in SE(3)$ ze systému základny
-do světa; počátek systému základny je v patě drátu, osa $z$ míří vzhůru.
+do světa; počátek systému základny je v patě puzzle, osa $z$ míří vzhůru.
 Pohyb robota zadáváme pózou příruby $\T_\mathrm{f}$, inverzní kinematiku
 počítá ovladač robota \cite{stations}.
 
@@ -164,7 +157,7 @@ V obraze detekujeme ArUco značky slovníku \texttt{DICT\_4X4\_50}
 \begin{equation}
   \mathbf{s} = \tfrac{1}{2}(\mathbf{m}_1 + \mathbf{m}_2).
 \end{equation}
-Je-li vidět jen značka $k$ (druhou může zakrývat drát bludiště), použijeme její
+Je-li vidět jen značka $k$ (druhou může zakrývat puzzle), použijeme její
 úhlopříčku $\mathbf{d} = \mathbf{p}_3 - \mathbf{p}_1$ (rohy 1 a 3), délky
 \SI{56,6}{mm}, a známou vzdálenost \SI{53}{mm} středu značky od středu základny:
 \begin{equation}
@@ -178,8 +171,10 @@ rovněž převedeme homografií. Výsledná poloha základny je
   \T = \begin{pmatrix} \R_z(\varphi) & (X,\ Y,\ z_0)^\top \\ \mathbf{0}^\top & 1 \end{pmatrix},
   \qquad z_0 = \SI{0,11}{m},
 \end{equation}
-kde $z_0$ je výška příruby odpovídající patě drátu, nastavená
-experimentálně. \todo{Ověřit a zdůvodnit hodnotu $z_0$ z výšky stolku.}
+kde $z_0$ je výška příruby odpovídající patě puzzle. Kalibraci
+(oddíl~\ref{sec:kalibrace}) jsme prováděli ve výšce \SI{0,10}{m}, ve které
+ale leží i horní plocha základny puzzle. Při navlékání v této výšce
+obruč do základny narážela, proto jsme $z_0$ zvedli o \SI{1}{cm}.
 
 \subsection{Odhad rotace stolku}
 \label{sec:rotace}
@@ -187,8 +182,7 @@ experimentálně. \todo{Ověřit a zdůvodnit hodnotu $z_0$ z výšky stolku.}
 Pořídíme $N = 10$ snímků s odstupem \SI{1}{s} a každý lokalizujeme
 (oddíl~\ref{sec:lokalizace}); snímky bez značek vynecháme. Ze středů
 $(X_k,Y_k)$ určíme střed otáčení $\mathbf{c} = (a,b)$ lineární metodou
-nejmenších čtverců \cite{kasa1976}. Rovnici kružnice přepíšeme do tvaru
-lineárního v neznámých $a,b,e$:
+nejmenších čtverců \cite{kasa1976}. Rovnici kružnice přepíšeme do lineárního tvaru s neznámými $a,b,e$:
 \begin{equation}
   X_k^2 + Y_k^2 = 2aX_k + 2bY_k + e,
   \qquad r = \sqrt{e + a^2 + b^2}.
@@ -249,11 +243,11 @@ Zde $\R_z$ značí homogenní rotaci kolem osy $z$.
   \label{fig:geometry}
 \end{figure}
 
-\subsection{Trajektorie po drátu}
+\subsection{Trajektorie podél puzzle}
 \label{sec:trajektorie}
 
 \todo{Tohle dát doprdele, existuje pdf, nebo říct že to udělal samotnej claude}
-Osu drátu varianty C jsme změřili z modelu STEP \cite{rob1hw} jako lomenou
+Osu puzzle varianty C jsme změřili z modelu STEP \cite{rob1hw} jako lomenou
 čáru (obr.~\ref{fig:puzzle_c}): svisle do $z = \SI{50}{mm}$, pod \ang{45} do
 $x = \SI{-50}{mm}$ ve $z = \SI{100}{mm}$, pod \ang{45} do $y = \SI{-50}{mm}$ ve
 $z = \SI{150}{mm}$ a svisle do volného konce v $z = \SI{200}{mm}$. Body
@@ -261,10 +255,10 @@ procházíme od volného konce k základně, nejnižší bod je
 $z = \SI{10}{mm}$ nad základnou, čímž splníme podmínku \SI{4}{cm}.
 Úseky zahustíme lineární interpolací s krokem nejvýše \SI{20}{mm}, výsledkem
 jsou body $\mathbf{P}_i$ v souřadnicích základny. Před první bod vložíme bod
-o \SI{20}{mm} výše, ze kterého obruč na drát najíždí.
+o \SI{20}{mm} výše, ze kterého obruč na puzzle najíždí.
 \todo{Tady to stejný}
 Geometrii jsme ověřili výpočtem největší vzdálenosti vrcholů sítě STEP modelu
-od osy; pro drát průřezu $10\times\SI{10}{mm}$ vychází \SI{7,07}{mm} (polovina
+od osy; pro puzzle s průřezem $10\times\SI{10}{mm}$ vychází \SI{7,07}{mm} (polovina
 úhlopříčky průřezu), větší hodnoty jen v rozích lomů.
 
 \begin{figure}[H]
@@ -274,14 +268,14 @@ od osy; pro drát průřezu $10\times\SI{10}{mm}$ vychází \SI{7,07}{mm} (polov
     \draw[-{Stealth},gray] (0,0,0) -- (1,0,0) node[left] {$x$};
     \draw[-{Stealth},gray] (0,0,0) -- (0,1,0) node[right] {$y$};
     \draw[-{Stealth},gray] (0,0,0) -- (0,0,2.4) node[above] {$z$};
-    % osa drátu [dm]
+    % osa puzzle [dm]
     \draw[ultra thick,blue] (0,0,0) -- (0,0,0.5) -- (-0.5,0,1.0) -- (-0.5,-0.5,1.5) -- (-0.5,-0.5,2.0);
     \foreach \p in {(0,0,0.1),(0,0,0.3),(0,0,0.5),(-0.25,0,0.75),(-0.5,0,1.0),(-0.5,-0.25,1.25),(-0.5,-0.5,1.5),(-0.5,-0.5,1.75),(-0.5,-0.5,2.0),(-0.5,-0.5,2.2)}
       \fill[red] \p circle (1.2pt);
     \node[left,font=\small] at (-0.5,-0.5,2.2) {start};
     \node[left,font=\small] at (0,0,0.1) {konec, $z=\SI{10}{mm}$};
   \end{tikzpicture}
-  \caption{Osa drátu varianty C (modře) a ilustrativní body trajektorie středu obruče
+  \caption{Osa puzzle varianty C (modře) a ilustrativní body trajektorie středu obruče
   $\mathbf{P}_i$ (červeně) v souřadnicích základny. Skutečný krok bodů je nejvýše \SI{20}{mm}.}
   \label{fig:puzzle_c}
 \end{figure}
@@ -294,7 +288,7 @@ Před pohybem ověříme, že první bod $\mathbf{P}_0$ je dosažitelný v deset
 natočeních stolku $\theta_j = 2\pi j/10$, $j = 0,\dots,9$, tj.\ že inverzní
 kinematika má pro cílovou pózu aspoň jedno řešení v kloubových limitech. Pokud
 ne, program vypíše hlášení a skončí bez pohybu. Zkoušíme celou otáčku, protože
-neznáme předem, v jakém natočení stolku robot k drátu dojede.
+neznáme předem, v jakém natočení stolku robot k puzzle dojede.
 \todo{Kontrolovat i ostatní body trajektorie, nejen $\mathbf{P}_0$. Nasrat clankere}
 
 \paragraph{Sledování.}
@@ -325,7 +319,7 @@ ovládáme knihovnou \texttt{ctu\_mitsubishi} \cite{stations}; třída
 \begin{itemize}
   \item \texttt{calibration.py} -- kalibrace $\mathbf{H}$, uloží \texttt{homography.npy},
   \item \texttt{utils/image\_utils.py} -- detekce obruče a značek, lokalizace, fit kružnice,
-  \item \texttt{utils/make\_key\_vectors.py} -- osy drátů a interpolované trajektorie,
+  \item \texttt{utils/make\_key\_vectors.py} -- osy puzzle a interpolované trajektorie,
   \item \texttt{main.py} -- odhad rotace, kontrola dosažitelnosti, navlékání.
 \end{itemize}
 
@@ -342,20 +336,20 @@ Abychom nemuseli každou změnu zkoušet na skutečném robotu, ladili jsme
 \begin{center}
   \texttt{./sim.sh --puzzle C --seed 7 src/main.py}
 \end{center}
-V prohlížeči se otevře 3D scéna s robotem, stolkem a bludištěm načteným
+V prohlížeči se otevře 3D scéna s robotem, stolkem a puzzle načteným
 z modelů STEP \cite{rob1hw} (obr.~\ref{fig:sim}). Snímky z kamery se
-zobrazují v samostatném okně. Volbami lze měnit variantu bludiště, jeho polohu
+zobrazují v samostatném okně. Volbami lze měnit variantu puzzle, jeho polohu
 (náhodně podle \texttt{seed}), periodu a střed otáčení stolku, zpoždění
 a šum kamery. Na konci simulátor vypíše vyhodnocení: zda došlo ke kontaktu
-a jak daleko po drátu obruč došla.
+a jak daleko podél puzzle obruč došla.
 
 \begin{figure}[H]
   \centering
-  \IfFileExists{img/simulator.png}%
-    {\includegraphics[width=0.8\linewidth]{img/simulator.png}}%
-    {\fbox{\parbox[c][5cm][c]{0.8\linewidth}{\centering\color{red} img/simulator.png}}}
-  \caption{Simulátor pracoviště: robot RV-6S s obručí nad bludištěm varianty C
-  na stolku. \todo{Doplnit snímek obrazovky.}}
+  \IfFileExists{img/sim.png}%
+    {\includegraphics[width=0.8\linewidth]{img/sim.png}}%
+    {\fbox{\parbox[c][5cm][c]{0.8\linewidth}{\centering\color{red} img/sim.png}}}
+  \caption{Simulátor pracoviště: robot RV-6S s obručí nad puzzle varianty C
+  na stolku.}
   \label{fig:sim}
 \end{figure}
 
@@ -363,21 +357,19 @@ a jak daleko po drátu obruč došla.
 \label{sec:exp_kalibrace}
 
 \emph{Cíl:} ověřit, že obruč je detekována ve všech polohách mřížky a že
-$\mathbf{H}$ převádí obraz do světa s chybou menší než vůle obruče na drátu.
-Obr.~\ref{fig:calib} ukazuje část kalibračních snímků z oddílu~\ref{sec:kalibrace}.
+$\mathbf{H}$ převádí obraz do světa s chybou menší než vůle obruče na puzzle.
+Obr.~\ref{fig:calib} ukazuje všechny kalibrační snímky z oddílu~\ref{sec:kalibrace}.
 
 \begin{figure}[H]
   \centering
-  \setlength{\tabcolsep}{2pt}
-  \begin{tabular}{cccc}
-    \calibimg{01} & \calibimg{02} & \calibimg{03} & \calibimg{04} \\
-    \calibimg{05} & \calibimg{06} & \calibimg{07} & \calibimg{08} \\
-    \calibimg{09} & \calibimg{10} & \calibimg{11} & \calibimg{12} \\
-    \calibimg{13} & \calibimg{14} & \calibimg{15} & \calibimg{16} \\
-  \end{tabular}
-  \caption{Kalibrační snímky obruče v 16 z 24 poloh mřížky $4\times6$ s krokem
-  \SI{0,1}{m}. \todo{Doplnit snímky do \texttt{img/calib\_XX.png} a vyznačit
-  detekovanou kružnici.}}
+  % mřížka 4 sloupce x 6 řádků, snímky img/image_0.png ... img/image_23.png
+  \foreach \i in {0,...,23}{%
+    \includegraphics[width=0.24\linewidth]{img/image_\i.png}%
+    \pgfmathtruncatemacro{\col}{mod(\i,4)}%
+    \ifnum\col=3 \par\vspace{2pt}\else\hspace{2pt}\fi
+  }
+  \caption{Kalibrační snímky obruče ve všech 24 polohách mřížky $4\times6$ s krokem
+  \SI{0,1}{m}. \todo{Vyznačit detekovanou kružnici.}}
   \label{fig:calib}
 \end{figure}
 
@@ -405,41 +397,15 @@ pracovní plochou, zvlášť pro oba směry otáčení. Uvést počet pokusů a 
 \vspace{6cm}
 
 %==========================================================================
-\section{Diskuse}
-\label{sec:diskuse}
-
-\paragraph{Diskrétní sledování.}
-Robot zastaví v každém bodě, zatímco se stolek otáčí dál. Bod drátu ve
-vzdálenosti $r$ od středu stolku se během pohybu trvajícího $t_\mathrm{m}$
-posune o oblouk
-\begin{equation}
-  e = r\,|\omega|\,t_\mathrm{m}.
-\end{equation}
-Pro $T_\mathrm{s} = \SI{27}{s}$ ($|\omega| \approx \SI{0,233}{rad/s}$),
-$r = \SI{0,1}{m}$ a $t_\mathrm{m} = \SI{0,2}{s}$ vychází $e \approx \SI{4,7}{mm}$.
-Tato chyba musí být menší než vůle mezi obručí a drátem.
-\todo{Doplnit vnitřní průměr obruče z \cite{rob1hw}, změřit $t_\mathrm{m}$
-a určit největší přípustné $r$.} Kratší perioda $T_\mathrm{s}$ oproti
-naměřené část tohoto zpoždění vyrovnává; přesnější by bylo cíl predikovat na
-okamžik dojezdu, $t + t_\mathrm{m}$.
-
-\paragraph{Omezení.}
-Orientace obruče je konstantní, řešení proto nelze přímo použít pro
-variantu D. Homografie platí jen pro jednu výšku a jednu orientaci obruče;
-značky leží v jiné výšce než obruč při kalibraci, což způsobí malou
-systematickou chybu, kterou kompenzují empirické posuny $z_0$ a $\Delta z$.
-\todo{Kvantifikovat chybu z rozdílu výšek.}
-
-%==========================================================================
 \section{Závěr}
 \label{sec:zaver}
 
-Řešili jsme navlékání obruče na drát varianty C na rotujícím stolku robotem
+Řešili jsme navlékání obruče na puzzle varianty C na rotujícím stolku robotem
 Mitsubishi RV-6S pouze s kamerou nad pracovištěm. Obraz převádíme do roviny
 robota homografií zkalibrovanou z polohy obruče, základnu lokalizujeme
 podle ArUco značek, střed otáčení stolku získáme proložením kružnice a polohu
-drátu v čase predikujeme rotací kolem tohoto středu. Robot pak sleduje
-předem vypočtené body osy drátu s konstantní orientací obruče
+puzzle v čase predikujeme rotací kolem tohoto středu. Robot pak sleduje
+předem vypočtené body osy puzzle s konstantní orientací obruče
 a nedosažitelnou polohu ohlásí před začátkem pohybu.
 \todo{Doplnit hlavní výsledky: úspěšnost X z Y pokusů pro oba směry otáčení,
 chyba kalibrace v mm.}
@@ -463,10 +429,10 @@ rotace, trajektorie a řízení, experimenty na robotu, simulátor).}
 \begin{itemize}
   \item AI jsme nejvíce využili k vývoji simulátoru pracoviště
         (oddíl~\ref{sec:simulator}), který z volně stažitelných modelů STEP
-        \cite{rob1hw} sestaví scénu se stolkem a bludištěm a napodobuje
+        \cite{rob1hw} sestaví scénu se stolkem a puzzle a napodobuje
         rozhraní ovladače robota i kameru. Díky tomu šlo ladit řešení bez
         rezervace robota.
-  \item AI pomohla s výpočtem os drátů z modelů STEP a s jejich kontrolou
+  \item AI pomohla s výpočtem os puzzle z modelů STEP a s jejich kontrolou
         vůči síti modelu.
   \item Kontrola pravopisu a stylistiky zprávy.
   \item \todo{Doplnit nebo upravit podle skutečného použití.}

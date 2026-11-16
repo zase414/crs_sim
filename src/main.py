@@ -95,8 +95,7 @@ def main():
         _, current_base_pos = calc_current_basepos() 
         current_point_pos = current_base_pos @ puzzle[0]
         ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
-        while(ang_puzzle_0 < np.sign(rot_speed) * -60 or ang_puzzle_0 < np.sign(rot_speed) * -140):
-            time.sleep(0.5)
+        while(60 <= np.sign(rot_speed) * -1 * ang_puzzle_0 <= 140):
             print("waiting for hoop to be in better position")
             _, current_base_pos = calc_current_basepos()
             current_point_pos = current_base_pos @ puzzle[0]
@@ -105,8 +104,6 @@ def main():
         for i, point in enumerate(puzzle[:-1]):
             
             q, current_base_pos = calc_current_basepos()
-
-            print(np.rad2deg(np.atan2(current_base_pos[1,0],current_base_pos[0,0])))
 
             next_robot_pose = current_base_pos @ point
             move_pose = robot.fk(q)
