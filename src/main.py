@@ -45,6 +45,7 @@ def main():
 
         # Exit path: rotation parameters could not be measured after MAX_PHOTO_DISABILITY_COUNT attempts
         if not valid_questionmark:
+            print("Unreachable")
             return
 
         # meassured period of rotation: 28.2, however, only Bulgarian constant works - 27, if rot_speed is real slow, set to zero ...no spinning
@@ -89,7 +90,7 @@ def main():
         _, current_base_pos = calc_current_basepos() 
         current_point_pos = current_base_pos @ puzzle[0]
         ang_puzzle_0 = np.rad2deg(np.atan2(current_point_pos[1,0],current_point_pos[0,0]))
-        while(50 <= np.sign(rot_speed) * -1 * ang_puzzle_0 <= 145):
+        while(60 <= np.sign(rot_speed) * -1 * ang_puzzle_0 <= 180):
             print("waiting for hoop to be in better position")
             _, current_base_pos = calc_current_basepos()
             current_point_pos = current_base_pos @ puzzle[0]

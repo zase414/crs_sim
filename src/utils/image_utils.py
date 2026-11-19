@@ -169,7 +169,6 @@ def localize_base(image, homography_M):
         # cv2.destroyAllWindows()
 
     else:
-        print("no way to solve this shit")
         return
         
     homogen_center = np.append(center_of_base_cam, 1.0)
@@ -262,8 +261,8 @@ def base_rotation_params(images, homography_M): #returns (rot_center, rot_center
         poses.append(pos)
         idxs.append(idx)
 
-    rotation_speed = np.mean(dirs)
-    #print(rotation_speed)
+    if len(dirs) > 0:
+        rotation_speed = np.mean(dirs) 
 
     if len(poses) < 3:
         print("not enough stand centers")
